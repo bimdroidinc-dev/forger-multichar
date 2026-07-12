@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>forger-multicharacter</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="css/style.css" />
+    <link rel="stylesheet" href="css/spawn.css" />
+</head>
+<body>
+    <!-- opaque cover shown until the selector scene is ready; the NUI layer sits
+         on top of the game so this hides the world during the loading-screen
+         handoff, regardless of the game's screen-fade state -->
+    <div id="blackout"></div>
+
+    <div id="app" class="forger is-hidden" data-theme="dark" data-menu="cinematic">
+        <!-- camera filter layer: backdrop-filters the game behind the whole UI -->
+        <div class="filter-layer" id="filterLayer" aria-hidden="true"></div>
+
+        <!-- cinematic letterbox -->
+        <div class="bars" aria-hidden="true"></div>
+
+        <!-- vignette so text stays readable over any backdrop -->
+        <div class="scrim" aria-hidden="true"></div>
+
+        <!-- brand -->
+        <header class="brand">
+            <div class="brand__mark" id="brandMark"></div>
+            <div class="brand__text">
+                <span class="brand__name" id="brandName">FORGER</span>
+                <span class="brand__tag" id="brandTag">MULTICHARACTER</span>
+            </div>
+        </header>
+
+        <!-- keybind hints -->
+        <div class="hints" id="hints"></div>
+
+        <!-- classic layout: name header top-left -->
+        <div class="classic-head" id="classicHead"></div>
+
+        <!-- classic layout: vertical menu -->
+        <nav class="menu" id="menu" aria-label="Character menu"></nav>
+
+        <!-- character browsing arrows -->
+        <button class="chev chev--prev" id="prev" aria-label="Previous character"></button>
+        <button class="chev chev--next" id="next" aria-label="Next character"></button>
+
+        <!-- slot indicator -->
+        <div class="dots" id="dots"></div>
+
+        <!-- camera zoom control -->
+        <div class="zoombar" id="zoombar" aria-hidden="true"></div>
+
+        <!-- info block (name / meta / description / money) -->
+        <section class="info" id="info"></section>
+
+        <!-- cinematic action cluster -->
+        <div class="actions" id="actions"></div>
+
+        <!-- settings panel -->
+        <aside class="sheet" id="settingsSheet" aria-hidden="true"></aside>
+
+        <!-- create panel -->
+        <aside class="sheet sheet--center" id="createSheet" aria-hidden="true"></aside>
+
+        <!-- delete confirm modal -->
+        <div class="modal" id="modal" aria-hidden="true"></div>
+
+        <!-- toast -->
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    </div>
+
+    <!-- background-music player: OUTSIDE #app so hiding #app never suspends the
+         iframe (that would cut the music when the spawn selector opens) -->
+    <div class="yt-host" aria-hidden="true"><div id="ytPlayer"></div></div>
+
+    <!-- spawn selector: sibling of #app so it survives #app being hidden -->
+    <div id="spawn" class="spawn is-hidden" data-theme="dark" aria-hidden="true">
+        <div class="spawn__scrim" aria-hidden="true"></div>
+        <button class="spawn__back" id="spawnBack" aria-label="Back to characters">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+            <span>Back</span>
+        </button>
+        <div class="spawn__inner">
+            <header class="spawn__head">
+                <span class="spawn__eyebrow" id="spawnEyebrow">FORGER</span>
+                <h1 class="spawn__title" id="spawnTitle">CHOOSE SPAWN</h1>
+                <p class="spawn__subtitle" id="spawnSubtitle">Where do you want to start?</p>
+            </header>
+            <div class="spawn__grid" id="spawnGrid" role="listbox" aria-label="Spawn points"></div>
+            <div class="spawn__foot">
+                <button class="spawn__confirm" id="spawnConfirm" disabled>
+                    <span>Spawn Here</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/spawn.js"></script>
+</body>
+</html>

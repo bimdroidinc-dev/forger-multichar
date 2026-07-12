@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<timecycle_modifier_data>
+  <!-- Custom grades for forger-multicharacter (not stock GTA modifiers). -->
+
+  <!-- HD Crisp: brighter, punchier, more saturated -->
+  <modifier name="forger_hd" numMods="5">
+    <postfx_bright value="1.070000" />
+    <postfx_intensity value="1.000000" />
+    <postfx_desaturation value="0.780000" />
+    <postfx_exposure value="0.080000" />
+    <postfx_vignetting_intensity value="0.150000" />
+  </modifier>
+
+  <!-- Noir: heavy desaturation, contrast, dark vignette -->
+  <modifier name="forger_noir" numMods="6">
+    <postfx_desaturation value="1.900000" />
+    <postfx_bright value="0.980000" />
+    <postfx_intensity value="1.000000" />
+    <postfx_exposure value="-0.050000" />
+    <postfx_vignetting_intensity value="0.550000" />
+    <postfx_vignetting_col value="0.000000 0.000000 0.000000" />
+  </modifier>
+
+  <!-- Golden Hour: warm, slightly hazy -->
+  <modifier name="forger_golden" numMods="6">
+    <postfx_bright value="1.050000" />
+    <postfx_intensity value="1.000000" />
+    <postfx_exposure value="0.060000" />
+    <postfx_lum_mult value="1.020000" />
+    <postfx_vignetting_intensity value="0.220000" />
+    <postfx_vignetting_col value="0.120000 0.050000 0.000000" />
+  </modifier>
+</timecycle_modifier_data>

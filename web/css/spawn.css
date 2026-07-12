@@ -1,0 +1,280 @@
+/* ==========================================================================
+   forger-multicharacter :: spawn selector
+   Self-contained overlay shown after a character is chosen. Reuses the theme
+   variables from style.css (:root) so it matches the main selector.
+   ========================================================================== */
+
+/* Full-screen cover that hides the game world until the selector is ready.
+   Visible by default so it covers the world the instant the NUI renders. */
+#blackout {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    z-index: 100000;
+}
+#blackout.off { display: none; }
+
+.spawn {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    font-family: var(--ui);
+    color: var(--text);
+    display: grid;
+    place-items: end center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 260ms ease;
+}
+
+.spawn.is-hidden { display: none; }
+
+.spawn.is-open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* darkening gradient so the tiles read over any game backdrop, while the top
+   of the screen stays clear to show the live cinematic scene */
+.spawn__scrim {
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(120% 90% at 50% 120%, rgba(0, 0, 0, 0.78), transparent 70%),
+        linear-gradient(to top, rgba(0, 0, 0, 0.82) 0%, rgba(0, 0, 0, 0.35) 42%, rgba(0, 0, 0, 0) 78%);
+    pointer-events: none;
+}
+
+.spawn__inner {
+    position: relative;
+    width: min(1120px, 92vw);
+    padding: 0 24px 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 26px;
+    transform: translateY(22px);
+    transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.spawn.is-open .spawn__inner { transform: translateY(0); }
+
+/* ---- back button -------------------------------------------------------- */
+.spawn__back {
+    position: absolute;
+    top: 34px;
+    left: 34px;
+    z-index: 2;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--ui);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-radius: 999px;
+    padding: 8px 6px;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.85);
+    opacity: 0;
+    transform: translateX(-8px);
+    transition: opacity 260ms ease 120ms, transform 260ms ease 120ms,
+        color 160ms ease;
+}
+
+.spawn.is-open .spawn__back { opacity: 1; transform: translateX(0); }
+
+.spawn__back:hover { color: var(--accent); }
+
+.spawn__back svg {
+    width: 18px;
+    height: 18px;
+    filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.85));
+}
+
+/* ---- header ------------------------------------------------------------- */
+.spawn__head {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+
+.spawn__eyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: var(--accent);
+    text-transform: uppercase;
+}
+
+.spawn__title {
+    font-family: var(--display);
+    font-size: 54px;
+    line-height: 0.94;
+    letter-spacing: 1px;
+    font-weight: 400;
+    text-shadow: 0 6px 30px rgba(0, 0, 0, 0.6);
+}
+
+.spawn__subtitle {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+}
+
+/* ---- tile grid ---------------------------------------------------------- */
+.spawn__grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 14px;
+}
+
+.spawn-tile {
+    position: relative;
+    text-align: center;
+    cursor: pointer;
+    border: none;
+    background: none;
+    border-radius: var(--radius);
+    padding: 16px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: var(--text);
+    font-family: var(--ui);
+    transition: transform 160ms ease;
+    animation: spawnTileIn 360ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+.spawn-tile:hover { transform: translateY(-4px); }
+
+/* selection is shown purely through the icon + text + check, no dark card */
+.spawn-tile.is-selected .spawn-tile__label { color: var(--accent); }
+
+.spawn-tile__icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: none;
+    border: 1.5px solid rgba(255, 255, 255, 0.35);
+    color: #fff;
+    filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.7));
+    transition: border-color 160ms ease, color 160ms ease,
+        background 160ms ease, transform 160ms ease;
+}
+
+.spawn-tile:hover .spawn-tile__icon {
+    border-color: var(--accent);
+    color: var(--accent);
+    transform: scale(1.04);
+}
+
+.spawn-tile.is-selected .spawn-tile__icon {
+    background: var(--accent);
+    color: var(--accent-ink);
+    border-color: var(--accent);
+    box-shadow: 0 0 22px var(--accent-glow);
+}
+
+.spawn-tile__icon svg { width: 26px; height: 26px; }
+
+.spawn-tile__label {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.9);
+    transition: color 160ms ease;
+}
+
+.spawn-tile__desc {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.72);
+    line-height: 1.35;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.9);
+}
+
+/* small "LAST" flag on the last-location tile */
+.spawn-tile__flag {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--accent-ink);
+    background: var(--accent);
+    padding: 3px 7px;
+    border-radius: 999px;
+}
+
+.spawn-tile__check {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-ink);
+    display: none;
+    place-items: center;
+}
+
+.spawn-tile.is-selected .spawn-tile__check { display: grid; }
+.spawn-tile.is-selected .spawn-tile__flag { display: none; }
+.spawn-tile__check svg { width: 14px; height: 14px; }
+
+/* ---- footer / confirm --------------------------------------------------- */
+.spawn__foot {
+    display: flex;
+    justify-content: center;
+}
+
+.spawn__confirm {
+    font-family: var(--ui);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: var(--accent-ink);
+    background: var(--accent);
+    border: none;
+    border-radius: 999px;
+    padding: 15px 46px;
+    box-shadow: 0 12px 34px var(--accent-glow);
+    transition: transform 140ms ease, opacity 140ms ease, filter 140ms ease;
+}
+
+.spawn__confirm:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.05); }
+.spawn__confirm:active:not(:disabled) { transform: translateY(0); }
+
+.spawn__confirm:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+    background: var(--panel-solid);
+    color: var(--muted);
+    box-shadow: none;
+}
+
+@keyframes spawnTileIn {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* keyboard focus visibility for controller/keyboard users */
+.spawn-tile:focus-visible,
+.spawn__confirm:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
