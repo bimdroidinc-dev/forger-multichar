@@ -418,6 +418,13 @@ preview is exact; for `skinchanger` it's a native best-effort; for `event`
 **ESX characters won't load.** Ensure `Config.Multichar = true` in `es_extended`
 and that `esx_multicharacter` is **not** running alongside this resource.
 
+**Loading screen never goes away (Qbox/QB "Downloading ... Server" hangs).** The
+connection loading screen is normally dismissed by the framework's multichar step,
+which this resource replaces — so it can hang. This resource already calls
+`ShutdownLoadingScreen()` / `ShutdownLoadingScreenNui()` when the selector opens to
+handle it. If your loading screen still sticks (custom loadscreen resource), also
+set `setr loadscreen:externalShutdown false` in `server.cfg`.
+
 **Repeated sky pans / fades on join.** Another spawn/char resource is respawning
 the player. This resource disables the default spawn manager's auto-spawn; make
 sure your old multichar/spawn flow is disabled as described in

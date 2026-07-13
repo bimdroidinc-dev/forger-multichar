@@ -481,6 +481,16 @@ local function openSelector()
 
     DoScreenFadeOut(0)  -- instant black: never show the world while we build the scene
     SendNUIMessage({ action = 'blackoutOn' })  -- NUI cover in case the game fade lags
+
+    -- This resource replaces the framework's multichar step, which is normally
+    -- where the connection loading screen (qbx/qb/esx) gets dismissed. Since that
+    -- step no longer runs, the loading screen would hang on screen forever. Now
+    -- that our own black cover is up, shut it down. Both natives are idempotent
+    -- and safe to call every time the selector opens.
+    -- (Alternative server-side fix: `setr loadscreen:externalShutdown false`.)
+    pcall(ShutdownLoadingScreen)
+    pcall(ShutdownLoadingScreenNui)
+
     Wait(50)
 
     -- load saved prefs first so the initial camera/weather/time reflect them
