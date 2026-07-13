@@ -79,6 +79,13 @@
         nationalities: [],
         busy: false,
         favorites: {},
+        partnerEnabled: true,
+        yourId: null,
+        pIncoming: [],
+        pSent: [],
+        pResults: [],
+        pTab: 'search',
+        paired: null, // { name, mode, emote, emoteIndex, emoteTotal }
         filter: 'none',
         musicUrl: '',
         musicPlaying: false,
@@ -213,6 +220,9 @@
         } else {
             html += '<button class="btn btn--play" data-act="create">' + svg('user-plus') + 'Create</button>';
         }
+        if (state.partnerEnabled !== false) {
+            html += '<button class="btn btn--icon" data-act="partner" title="Partner">' + svg('users') + '</button>';
+        }
         html += '<button class="btn btn--icon" data-act="settings" title="Settings">' + svg('settings') + '</button>';
         html += '<button class="btn btn--icon" data-act="exit" title="Exit">' + svg('log-out') + '</button>';
         el.innerHTML = html;
@@ -227,6 +237,7 @@
         } else {
             items.push({ label: 'Create', act: 'create' });
         }
+        if (state.partnerEnabled !== false) items.push({ label: 'Partner', act: 'partner' });
         items.push({ label: 'Settings', act: 'settings' });
         items.push({ label: 'Exit', act: 'exit' });
         $('menu').innerHTML = items.map(function (it, i) {
@@ -284,8 +295,9 @@
         blip(440);
         const slot = currentSlot();
         post('preview', slot.type === 'char'
-            ? { gender: slot.data.gender, appearance: slot.data.appearance || null }
+            ? { gender: slot.data.gender, appearance: slot.data.appearance || null, scene: slot.data.scene || null, citizenid: slot.data.citizenid || null }
             : { gender: 0, __empty: true });
+        sendPartnerChar();
     }
     function next() { setIndex(state.index + 1); }
     function prev() { setIndex(state.index - 1); }
@@ -349,6 +361,9 @@
             toggleRow('fpsMode', 'FPS Mode', 'Reduces visual effects to improve performance.') +
             toggleRow('keybindHints', 'Keybind Hints', 'Show keyboard shortcuts on screen.') + '</div>' +
 
+            '<div class="group"><div class="group__label">' + svg('aperture') + 'Character Scene</div>' +
+            toggleRow('customScene', 'Use My Custom Scene', 'Show your saved /scene backdrop for characters that have one. A partner scene always takes priority.') + '</div>' +
+
             '<div class="group"><div class="group__label">' + svg('aperture') + 'Camera Filter</div><div class="filter-grid">' + filterGrid + '</div></div>' +
 
             '<div class="group"><div class="group__label">' + svg('volume') + 'Audio</div>' +
@@ -408,6 +423,9 @@
                 if (key === 'backgroundMusic') {
                     if (inp.checked && state.musicUrl) playMusic(state.musicUrl);
                     else stopMusic();
+                }
+                if (key === 'customScene') {
+                    post('applySetting', { key: 'customScene', value: inp.checked });
                 }
                 blip(); persist();
             });
@@ -469,6 +487,7 @@
             cinematicBars: state.settings.cinematicBars,
             fpsMode: state.settings.fpsMode,
             keybindHints: state.settings.keybindHints,
+            customScene: state.settings.customScene,
             soundEffects: state.settings.soundEffects,
             soundVolume: state.settings.soundVolume,
             backgroundMusic: state.settings.backgroundMusic,
@@ -593,10 +612,12 @@
             }
             case 'create': openCreate(); break;
             case 'delete': askDelete(); break;
+            case 'partner': openPartner(); break;
             case 'settings': openSettings(); break;
             case 'closeSettings': closeSettings(); break;
             case 'submitCreate': submitCreate(); break;
             case 'closeCreate': closeCreate(); break;
+            case 'closePartner': closePartner(); break;
             case 'closeModal': closeModal(); break;
             case 'confirmDelete': confirmDelete(); break;
             case 'reset': resetSettings(); break;
@@ -640,6 +661,7 @@
     function anySheetOpen() {
         return $('settingsSheet').classList.contains('is-open') ||
             $('createSheet').classList.contains('is-open') ||
+            $('partnerSheet').classList.contains('is-open') ||
             $('modal').classList.contains('is-open');
     }
     document.addEventListener('keydown', function (e) {
@@ -652,14 +674,23 @@
             if ($('modal').classList.contains('is-open')) return closeModal();
             if ($('createSheet').classList.contains('is-open')) return closeCreate();
             if ($('settingsSheet').classList.contains('is-open')) return closeSettings();
+            if ($('partnerSheet').classList.contains('is-open')) return closePartner();
             return;
         }
         if (typing) return;
         if (anySheetOpen()) return;
 
+        // while paired, arrows cycle emotes instead of browsing characters
+        if (state.paired) {
+            if (key === 'arrowleft') { e.preventDefault(); post('partnerEmote', { delta: -1 }); blip(); return; }
+            if (key === 'arrowright') { e.preventDefault(); post('partnerEmote', { delta: 1 }); blip(); return; }
+            if (key === 'x') { e.preventDefault(); post('partnerUnpair', {}); return; }
+        }
+
         if (key === 'arrowleft') { e.preventDefault(); prev(); }
         else if (key === 'arrowright') { e.preventDefault(); next(); }
         else if (key === 'enter') { e.preventDefault(); doAction('play'); }
+        else if (key === 'p') { e.preventDefault(); if (state.partnerEnabled) openPartner(); }
         else if (key === 'e') { e.preventDefault(); post('changePose', {}); blip(); }
         else if (key === 'j') { e.preventDefault(); post('changeLocation', {}); blip(); }
         else if (key === 'z') { e.preventDefault(); setZoom(state.zoom >= 3 ? 1 : state.zoom + 1); }
@@ -680,6 +711,243 @@
         el.classList.add('show');
         clearTimeout(toastT);
         toastT = setTimeout(function () { el.classList.remove('show'); }, 3200);
+    }
+
+    // ---- partner system ---------------------------------------------------
+    function sendPartnerChar() {
+        if (!state.partnerEnabled) return;
+        const slot = currentSlot();
+        if (slot.type === 'char') {
+            post('partnerSetChar', { citizenid: slot.data.citizenid, name: slot.data.firstname + ' ' + slot.data.lastname, gender: slot.data.gender });
+        } else {
+            post('partnerSetChar', { citizenid: null });
+        }
+    }
+
+    let searchTimer = null;
+    function currentCharName() {
+        const slot = currentSlot();
+        return slot.type === 'char' ? (slot.data.firstname + ' ' + slot.data.lastname) : 'No character';
+    }
+
+    function partnerTab(tab) { state.pTab = tab; renderPartner(); }
+
+    function renderPartner() {
+        const tabs = [
+            { id: 'search', label: 'Search', icon: 'search' },
+            { id: 'incoming', label: 'Incoming', icon: 'inbox', badge: state.pIncoming.length },
+            { id: 'sent', label: 'Sent', icon: 'send' },
+        ].map(function (t) {
+            return '<button class="ptab' + (state.pTab === t.id ? ' is-on' : '') + '" data-ptab="' + t.id + '">' +
+                svg(t.icon) + t.label + (t.badge ? '<span class="badge">' + t.badge + '</span>' : '') + '</button>';
+        }).join('');
+
+        let body = '';
+        if (state.pTab === 'search') {
+            const rows = state.pResults.map(function (r) {
+                return '<div class="prow"><div class="prow__ava">' + svg('user') + '</div>' +
+                    '<div class="prow__meta"><div class="prow__name">' + escapeHtml(r.name) + '</div><div class="prow__sub">ID: ' + r.id + '</div></div>' +
+                    '<div class="prow__acts">' +
+                    '<button class="pbtn pbtn--couple" data-invite="' + r.id + '" data-mode="couple" title="Couple request">' + svg('heart') + '</button>' +
+                    '<button class="pbtn pbtn--friend" data-invite="' + r.id + '" data-mode="friend" title="Friend request">' + svg('users') + '</button>' +
+                    '</div></div>';
+            }).join('');
+            body = '<div class="psearch">' + svg('search') + '<input id="pSearchInput" placeholder="Search by name or ID..." autocomplete="off"/></div>' +
+                (rows ? '<div class="plist">' + rows + '</div>'
+                    : '<div class="pempty">' + svg('search') + '<div class="t">Type to search for online players</div><div class="d">The other player must also have the character screen open.</div></div>');
+        } else if (state.pTab === 'incoming') {
+            if (!state.pIncoming.length) {
+                body = '<div class="pempty">' + svg('inbox') + '<div class="t">No incoming requests</div></div>';
+            } else {
+                body = '<div class="plist">' + state.pIncoming.map(function (r) {
+                    return '<div class="prow"><div class="prow__ava">' + svg('user') + '</div>' +
+                        '<div class="prow__meta"><div class="prow__name">' + escapeHtml(r.name) + '</div>' +
+                        '<div class="prow__sub"><span class="prow__badge ' + r.mode + '">' + r.mode + ' request</span></div></div>' +
+                        '<div class="prow__acts">' +
+                        '<button class="pbtn pbtn--accept" data-respond="' + r.id + '" data-accept="1" title="Accept">' + svg('check') + '</button>' +
+                        '<button class="pbtn pbtn--decline" data-respond="' + r.id + '" data-accept="0" title="Decline">' + svg('x') + '</button>' +
+                        '</div></div>';
+                }).join('') + '</div>';
+            }
+        } else {
+            if (!state.pSent.length) {
+                body = '<div class="pempty">' + svg('send') + '<div class="t">No sent requests</div></div>';
+            } else {
+                body = '<div class="plist">' + state.pSent.map(function (r) {
+                    return '<div class="prow"><div class="prow__ava">' + svg('user') + '</div>' +
+                        '<div class="prow__meta"><div class="prow__name">' + escapeHtml(r.name) + '</div>' +
+                        '<div class="prow__sub"><span class="prow__badge ' + r.mode + '">' + r.mode + '</span> · pending</div></div>' +
+                        '<div class="prow__acts"><button class="pbtn pbtn--decline" data-cancel="' + r.id + '" title="Cancel">' + svg('x') + '</button></div></div>';
+                }).join('') + '</div>';
+            }
+        }
+
+        $('partnerSheet').innerHTML =
+            '<div class="sheet__head"><div><div class="sheet__title">Partner System</div>' +
+            '<div class="sheet__sub">Connect with other players.' + (state.yourId ? ' <b style="color:var(--accent)">Your ID: ' + state.yourId + '</b>' : '') + '</div></div>' +
+            '<div class="sheet__tools"><button class="icobtn" data-act="closePartner">' + svg('x') + '</button></div></div>' +
+            '<div class="ptabs">' + tabs + '</div>' +
+            '<div class="sendingas">' + svg('user') + 'Sending as: <b>' + escapeHtml(currentCharName()) + '</b></div>' +
+            body;
+
+        wirePartner();
+    }
+
+    function wirePartner() {
+        const sheet = $('partnerSheet');
+        sheet.querySelectorAll('[data-ptab]').forEach(function (b) {
+            b.addEventListener('click', function () { partnerTab(b.getAttribute('data-ptab')); });
+        });
+        const input = $('pSearchInput');
+        if (input) {
+            input.focus();
+            input.addEventListener('input', function () {
+                clearTimeout(searchTimer);
+                const q = input.value.trim();
+                searchTimer = setTimeout(function () { post('partnerSearch', { query: q }); }, 220);
+            });
+        }
+        sheet.querySelectorAll('[data-invite]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                post('partnerInvite', { targetId: parseInt(b.getAttribute('data-invite'), 10), mode: b.getAttribute('data-mode') });
+                toast('Request sent.', 'ok'); blip(660);
+            });
+        });
+        sheet.querySelectorAll('[data-respond]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                post('partnerRespond', { fromId: parseInt(b.getAttribute('data-respond'), 10), accept: b.getAttribute('data-accept') === '1' });
+                blip();
+            });
+        });
+        sheet.querySelectorAll('[data-cancel]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                post('partnerCancel', { targetId: parseInt(b.getAttribute('data-cancel'), 10) }); blip();
+            });
+        });
+    }
+
+    function openPartner() { sendPartnerChar(); renderPartner(); $('partnerSheet').classList.add('is-open'); }
+    function closePartner() { $('partnerSheet').classList.remove('is-open'); }
+
+    // match modal
+    function showMatch(mode) {
+        const modal = $('modal');
+        modal.innerHTML =
+            '<div class="modal__box"><div class="modal__icon love">' + svg('heart') + '</div>' +
+            '<div class="modal__title">MATCH!</div>' +
+            '<div class="modal__text">You are now paired as a ' + (mode === 'friend' ? 'friend duo' : 'couple') + '.</div></div>';
+        modal.classList.add('is-open');
+        setTimeout(function () { modal.classList.remove('is-open'); }, 2600);
+    }
+
+    // emote bar
+    function renderEmotebar() {
+        const bar = $('emotebar');
+        if (!state.paired) { bar.classList.remove('show'); bar.innerHTML = ''; return; }
+        const p = state.paired;
+        bar.innerHTML =
+            '<button class="emotebar__nav" data-emote="prev">' + svg('chevron-left') + '</button>' +
+            '<div class="emotebar__mid"><div class="emotebar__label">' + escapeHtml(p.emote || '—') + '</div>' +
+            '<div class="emotebar__sub">' + (p.mode === 'friend' ? 'Friend' : 'Couple') + ' · ' + (p.emoteIndex || 1) + '/' + (p.emoteTotal || 1) + '</div></div>' +
+            '<button class="emotebar__nav" data-emote="next">' + svg('chevron-right') + '</button>' +
+            '<button class="emotebar__leave" data-emote="leave">' + svg('heart-off') + 'Leave</button>';
+        bar.classList.add('show');
+        bar.querySelectorAll('[data-emote]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                const a = b.getAttribute('data-emote');
+                if (a === 'leave') { post('partnerUnpair', {}); }
+                else { post('partnerEmote', { delta: a === 'next' ? 1 : -1 }); blip(); }
+            });
+        });
+    }
+
+    // request notif (top-left)
+    let notifT = null;
+    function showNotif(name, mode) {
+        const el = $('notif');
+        el.innerHTML = '<div class="notif__ico">' + svg(mode === 'friend' ? 'users' : 'heart') + '</div>' +
+            '<div><div class="notif__t">New request</div><div class="notif__d">' + escapeHtml(name) + ' sent you a ' + (mode === 'friend' ? 'friend' : 'couple') + ' request.</div></div>';
+        el.classList.add('show');
+        clearTimeout(notifT);
+        notifT = setTimeout(function () { el.classList.remove('show'); }, 5000);
+    }
+
+    // direct invite confirmation prompt (auto-dismiss after ~10s)
+    let promptTimer = null;
+    function showInvitePrompt(fromId, name, mode) {
+        const modal = $('modal');
+        modal.innerHTML =
+            '<div class="modal__box"><div class="modal__icon love">' + svg(mode === 'friend' ? 'users' : 'heart') + '</div>' +
+            '<div class="modal__title">' + escapeHtml(name || 'Someone') + '</div>' +
+            '<div class="modal__text">wants to pair as a ' + (mode === 'friend' ? 'friend duo' : 'couple') + '.<br><span id="promptCount">10</span>s to respond</div>' +
+            '<div class="modal__cta"><button class="cta" data-prompt="decline">Decline</button>' +
+            '<button class="cta cta--primary" data-prompt="accept">' + svg('check') + 'Accept</button></div></div>';
+        modal.classList.add('is-open');
+        modal.querySelectorAll('[data-prompt]').forEach(function (b) {
+            b.addEventListener('click', function () {
+                clearInterval(promptTimer);
+                modal.classList.remove('is-open');
+                post('partnerRespond', { fromId: fromId, accept: b.getAttribute('data-prompt') === 'accept' });
+                blip(660);
+            });
+        });
+        let n = 10;
+        clearInterval(promptTimer);
+        promptTimer = setInterval(function () {
+            n -= 1;
+            const c = $('promptCount');
+            if (c) c.textContent = n;
+            if (n <= 0) {
+                clearInterval(promptTimer);
+                // just close the prompt; the request stays in the Incoming tab
+                if ($('modal').innerHTML.indexOf('to respond') !== -1) modal.classList.remove('is-open');
+            }
+        }, 1000);
+        blip(700);
+    }
+
+    function handlePartnerMessage(d) {
+        switch (d.action) {
+            case 'partnerYourId': state.yourId = d.id; if ($('partnerSheet').classList.contains('is-open')) renderPartner(); break;
+            case 'partnerLists':
+                state.pIncoming = d.incoming || [];
+                state.pSent = d.sent || [];
+                if ($('partnerSheet').classList.contains('is-open')) renderPartner();
+                break;
+            case 'partnerSearchResults':
+                state.pResults = d.results || [];
+                if (state.pTab === 'search' && $('partnerSheet').classList.contains('is-open')) renderPartner();
+                break;
+            case 'partnerPrompt':
+                showInvitePrompt(d.fromId, d.name, d.mode);
+                break;
+            case 'partnerMatched':
+                closePartner();
+                showMatch(d.mode);
+                break;
+            case 'partnerActive':
+                state.paired = { name: d.partner && d.partner.name, mode: d.mode, emote: d.emote, emoteIndex: d.emoteIndex, emoteTotal: d.emoteTotal };
+                renderEmotebar();
+                app.classList.add('paired');
+                break;
+            case 'partnerInactive':
+                state.paired = null;
+                renderEmotebar();
+                app.classList.remove('paired');
+                break;
+            case 'partnerEmoteChanged':
+                if (state.paired) { state.paired.emote = d.emote; state.paired.emoteIndex = d.emoteIndex; state.paired.emoteTotal = d.emoteTotal; renderEmotebar(); }
+                break;
+            case 'partnerEnded':
+                state.paired = null;
+                renderEmotebar();
+                app.classList.remove('paired');
+                toast('Partnership ended.', 'err');
+                break;
+            case 'partnerToast':
+                toast(d.text, d.kind || 'err');
+                break;
+        }
     }
 
     // ---- camera filter ----------------------------------------------------
@@ -755,7 +1023,7 @@
     function applyPrefs(p) {
         if (!p || typeof p !== 'object' || !Object.keys(p).length) return;
         ['theme', 'menuStyle', 'cinematicBars', 'fpsMode', 'keybindHints', 'soundEffects',
-         'soundVolume', 'backgroundMusic', 'musicVolume', 'weather', 'hour', 'minute'
+         'soundVolume', 'backgroundMusic', 'musicVolume', 'weather', 'hour', 'minute', 'customScene'
         ].forEach(function (k) { if (p[k] !== undefined && p[k] !== null) state.settings[k] = p[k]; });
         if (p.filter !== undefined) state.filter = p.filter || 'none';
         if (p.musicUrl !== undefined) state.musicUrl = p.musicUrl || '';
@@ -781,12 +1049,16 @@
             applyFilter(state.filter);
         } else if (d.action === 'close') {
             app.classList.add('is-hidden');
+            app.classList.remove('paired');
             state.busy = false;
+            state.paired = null;
+            renderEmotebar();
             stopMusic();
         } else if (d.action === 'spawnHide') {
             // handing off to the spawn selector: hide the character UI but keep
             // the music playing (the YT player lives outside #app now).
             app.classList.add('is-hidden');
+            app.classList.remove('paired');
             state.busy = false;
         } else if (d.action === 'spawnShow') {
             // returning from the spawn selector via Back: reveal the character UI
@@ -796,7 +1068,7 @@
             applyFilter(state.filter);
             var backSlot = currentSlot();
             post('preview', backSlot.type === 'char'
-                ? { gender: backSlot.data.gender, appearance: backSlot.data.appearance || null }
+                ? { gender: backSlot.data.gender, appearance: backSlot.data.appearance || null, scene: backSlot.data.scene || null, citizenid: backSlot.data.citizenid || null }
                 : { gender: 0, __empty: true });
         } else if (d.action === 'setData') {
             applyData(d.data);
@@ -806,6 +1078,8 @@
             handleResult(d.data);
         } else if (d.action === 'locationChanged') {
             toast(d.label, 'ok');
+        } else if (d.action && d.action.indexOf('partner') === 0) {
+            handlePartnerMessage(d);
         }
     });
 
@@ -815,6 +1089,7 @@
         state.brand = data.brand || state.brand;
         state.weatherOptions = data.weatherOptions || state.weatherOptions;
         state.nationalities = data.nationalities || state.nationalities;
+        if (typeof data.partnerEnabled === 'boolean') state.partnerEnabled = data.partnerEnabled;
         if (data.settings) {
             state.defaults = Object.assign({}, data.settings);
             if (!state.settings || !Object.keys(state.settings).length) {
@@ -835,8 +1110,9 @@
         // preview current
         const slot = currentSlot();
         post('preview', slot.type === 'char'
-            ? { gender: slot.data.gender, appearance: slot.data.appearance || null }
+            ? { gender: slot.data.gender, appearance: slot.data.appearance || null, scene: slot.data.scene || null, citizenid: slot.data.citizenid || null }
             : { gender: 0, __empty: true });
+        sendPartnerChar();
     }
 
     function handleResult(res) {

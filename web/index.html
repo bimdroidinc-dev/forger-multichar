@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="css/style.css" />
     <link rel="stylesheet" href="css/spawn.css" />
+    <link rel="stylesheet" href="css/scenemaker.css" />
 </head>
 <body>
     <!-- opaque cover shown until the selector scene is ready; the NUI layer sits
@@ -66,8 +67,17 @@
         <!-- create panel -->
         <aside class="sheet sheet--center" id="createSheet" aria-hidden="true"></aside>
 
-        <!-- delete confirm modal -->
+        <!-- partner panel -->
+        <aside class="sheet" id="partnerSheet" aria-hidden="true"></aside>
+
+        <!-- paired emote controller -->
+        <div class="emotebar" id="emotebar" aria-hidden="true"></div>
+
+        <!-- delete confirm / match modal -->
         <div class="modal" id="modal" aria-hidden="true"></div>
+
+        <!-- top-left request notification -->
+        <div class="notif" id="notif" aria-hidden="true"></div>
 
         <!-- toast -->
         <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -99,7 +109,82 @@
         </div>
     </div>
 
+    <!-- scene maker builder panel (in-game /scene) -->
+    <div id="scene-maker" class="sm is-hidden">
+        <div class="sm__hint" id="smHint">Pose your character, frame the shot, then Save</div>
+        <div class="sm__panel" id="smPanel">
+            <header class="sm__head">
+                <span class="sm__eyebrow">SCENE MAKER</span>
+                <h2 class="sm__title">BUILD BACKDROP</h2>
+            </header>
+            <div class="sm__body">
+                <section class="sm__sec sm__coop" id="smCoop">
+                    <div class="sm__label">Session <span class="sm__count" id="smMemberCount">1</span></div>
+                    <div class="sm__roster" id="smRoster"></div>
+                    <button class="sm__btn sm__btn--wide sm__org" id="smInvite">Invite Nearby</button>
+                    <div class="sm__invnote" id="smInvNote">The organizer sets the time, weather and camera.</div>
+                </section>
+                <section class="sm__sec">
+                    <div class="sm__label">Stance</div>
+                    <div class="sm__cats" id="smCats"></div>
+                    <div class="sm__grid" id="smStances"></div>
+                </section>
+                <section class="sm__sec">
+                    <div class="sm__label">Vehicles <span class="sm__count" id="smVehCount">0</span></div>
+                    <div class="sm__vehbar">
+                        <button class="sm__btn sm__btn--wide" id="smGarage">Load Garage</button>
+                        <button class="sm__btn sm__btn--ghost sm__btn--wide" id="smVehClear">Remove all</button>
+                    </div>
+                    <div class="sm__vehlist" id="smVehList"><div class="sm__vehempty">Load your garage to place a vehicle.</div></div>
+                </section>
+                <section class="sm__sec sm__org">
+                    <div class="sm__label">Camera</div>
+                    <div class="sm__sliders" id="smCam"></div>
+                </section>
+                <section class="sm__sec sm__org">
+                    <div class="sm__label">Time</div>
+                    <div class="sm__timeval" id="smTimeVal">12:00</div>
+                    <input class="sm__range" id="smTime" type="range" min="0" max="1439" step="10" value="720" />
+                </section>
+                <section class="sm__sec sm__org">
+                    <div class="sm__label">Weather</div>
+                    <div class="sm__weathers" id="smWeathers"></div>
+                </section>
+            </div>
+            <footer class="sm__foot">
+                <button class="sm__btn" id="smMove">Reposition</button>
+                <button class="sm__btn sm__btn--ghost sm__org" id="smClear">Clear</button>
+                <button class="sm__btn sm__btn--ghost" id="smClose">Close</button>
+                <button class="sm__btn sm__btn--accent sm__org" id="smSave">Save Scene</button>
+            </footer>
+        </div>
+    </div>
+
+    <!-- scene maker overlays: instructions, invite prompt, player picker -->
+    <div id="sm-instruct" class="smi is-hidden"></div>
+    <div id="sm-prompt" class="smp is-hidden">
+        <div class="smp__box">
+            <div class="smp__title" id="smpTitle"></div>
+            <div class="smp__keys">
+                <span class="smp__key smp__key--go">Enter</span> accept
+                <span class="smp__sep">·</span>
+                <span class="smp__key smp__key--no">Backspace</span> decline
+            </div>
+        </div>
+    </div>
+    <div id="sm-picker" class="smk is-hidden">
+        <div class="smk__box">
+            <div class="smk__head">Invite Nearby Players</div>
+            <div class="smk__list" id="smkList"></div>
+            <div class="smk__foot">
+                <button class="sm__btn sm__btn--ghost" id="smkCancel">Cancel</button>
+                <button class="sm__btn sm__btn--accent" id="smkSend">Send Invites</button>
+            </div>
+        </div>
+    </div>
+
     <script src="js/app.js"></script>
     <script src="js/spawn.js"></script>
+    <script src="js/scenemaker.js"></script>
 </body>
 </html>

@@ -3,12 +3,9 @@ Config = {}
 -- ---------------------------------------------------------------------------
 -- Framework
 -- ---------------------------------------------------------------------------
--- 'auto' detects, in order: qbx_core, qb-core, es_extended. Force one if
--- detection is ever wrong on your server.
---   'qbx' - Qbox         (qbx_core)
---   'qb'  - QBCore       (qb-core)
---   'esx' - ESX Legacy   (es_extended, with Config.Multichar = true)
-Config.Framework = 'auto' -- 'auto' | 'qbx' | 'qb' | 'esx'
+-- 'auto' will try to detect qbx_core, then qb-core. Force one if detection is
+-- ever wrong on your server.
+Config.Framework = 'auto' -- 'auto' | 'qbx' | 'qb'
 
 -- Open the selector automatically the first time a client's session starts.
 -- If your core (qbx_core / qb-multicharacter) already opens its own selector,
@@ -34,8 +31,7 @@ Config.Logout = {
     cooldown = 2,
 }
 
--- Name of the players table and its columns (QB / Qbox default schema). Only
--- used when Config.Framework resolves to 'qb' or 'qbx'.
+-- Name of the players table and its columns (QB / Qbox default schema).
 Config.DB = {
     table = 'players',
     columnLicense = 'license',
@@ -45,29 +41,6 @@ Config.DB = {
     columnJob = 'job',
     columnPosition = 'position',
     columnLastUpdated = 'last_updated',
-}
-
--- ESX (es_extended) schema. Only used when Config.Framework resolves to 'esx'.
--- ESX stores characters in the `users` table with flat columns and an
--- identifier of the form `char<slot>:<license>` (esx_multicharacter). This
--- resource reuses ESX's own load flow (esx:onPlayerJoined), so you MUST have
--- `Config.Multichar = true` set in es_extended for ESX character loading.
-Config.ESX = {
-    table = 'users',
-    columnIdentifier = 'identifier',   -- 'char1:license:xxxx'
-    columnFirstname = 'firstname',
-    columnLastname = 'lastname',
-    columnDob = 'dateofbirth',
-    columnSex = 'sex',                 -- 'm' / 'f' (or 0 / 1 on some forks)
-    columnAccounts = 'accounts',       -- JSON: { money = .., bank = .., black_money = .. }
-    columnJob = 'job',                 -- job name
-    columnJobGrade = 'job_grade',
-    columnPosition = 'position',       -- JSON coords
-    columnSkin = 'skin',               -- JSON appearance / skinchanger map
-    columnMetadata = 'metadata',       -- JSON (playtime etc. if present)
-    prefix = 'char',                   -- esx_multicharacter Config.Prefix
-    maxSlots = 4,                      -- esx_multicharacter Config.Slots (ceiling ESX enforces)
-    startingAccounts = { money = 0, bank = 5000 }, -- new-character accounts (ESX)
 }
 
 -- ---------------------------------------------------------------------------
@@ -162,6 +135,36 @@ Config.Locations = {
     { label = 'City Overlook',  ped = vec4(-1520.5, 840.5, 181.4, 120.0) },
 }
 
+-- Scenes used INSTEAD of Config.Locations when the character being viewed has a
+-- couple (a saved partner). Cycled with the same location key. Per-scene `cam`:
+--   view   = 'back' (camera behind the couple) or 'front' (default, see faces)
+--   motion = 'pan' for a slow cinematic pan, or 'static' / 'sway' / 'orbit'
+-- A scene with type = 'walk' makes the couple stroll from `from` to `to`, then
+-- loop back to the start.
+Config.CoupleLocations = {
+    -- 1. Overlook: back view of the couple looking out over the city, slow pan.
+    {
+        label = 'Overlook',
+        ped = vec4(920.1934, -10.6644, 111.2755, 138.2280),
+        cam = { view = 'back', motion = 'pan', panArc = 16.0, panSpeed = 0.018 },
+    },
+    -- 2. Beach: normal front view.
+    {
+        label = 'Beach',
+        ped = vec4(-1494.8589, -1305.7769, 4.2923, 110.3542),
+        cam = { view = 'front', motion = 'static' },
+    },
+    -- 3. Stroll: the couple walks from `from` to `to`, then loops to the start.
+    {
+        label = 'Stroll',
+        type = 'walk',
+        from = vec4(916.9807, 23.6701, 113.5521, 326.2358),
+        to   = vec4(947.3136, 71.4556, 113.5484, 143.9492),
+        walkSpeed = 1.0,          -- 1.0 = normal walk, ~2.0 = jog
+        cam = { view = 'front', motion = 'static' },
+    },
+}
+
 -- Camera framing for the preview. Built from the ped's real position + facing,
 -- so it's always in front of the character and never cut off.
 --
@@ -189,6 +192,15 @@ Config.Camera = {
     orbitSpeed = 3.0,  -- degrees per second for 'orbit' (slow)
     pushAmount = 0.5,  -- metres in/out for 'push'
     pushSpeed = 0.06,  -- cycles per second for 'push' (slow)
+
+    -- Widened relative to the CURRENT zoom while paired, so Close/Medium/Far
+    -- still work with a partner (added on top of the selected zoom preset).
+    pairMotion = 'static',
+    pairDistanceAdd = 1.3,
+    pairHeightAdd = 0.2,
+    pairPointAtAdd = 0.18,
+    pairFovAdd = 5.0,
+    pairSwayArc = 8.0,
 }
 
 -- Idle poses cycled with the "Change Pose" key (E).
@@ -224,13 +236,14 @@ Config.Poses = {
 -- location or coming back from the spawn selector keeps the current pose.
 Config.RandomPoseOnLoad = true
 
--- How fast a single idle pose (cycled with E) eases in, so the ped visibly
--- moves into the pose instead of snapping to it.
+-- How fast a single idle pose (cycled with E) eases in. Matches the couple
+-- lead-in (Config.Partner.emoteBlendIn) so the ped visibly moves into the pose
+-- instead of snapping to it.
 --   1.5 = soft lead-in (default)   8.0 = instant snap
 Config.PoseBlendIn = 1.5
 
--- Loop idle poses with a pause between cycles instead of a continuous seamless
--- loop. The emote plays through, holds briefly, then replays.
+-- Loop idle poses and couple emotes with a pause between cycles instead of a
+-- continuous seamless loop. The emote plays through, holds briefly, then replays.
 Config.EmoteLoop = {
     spaced = true,
     gapSeconds = 1.4,     -- pause between the end of one cycle and the next
@@ -238,100 +251,30 @@ Config.EmoteLoop = {
 }
 
 -- ---------------------------------------------------------------------------
--- Appearance / clothing
+-- Appearance
 -- ---------------------------------------------------------------------------
--- Loading a saved character's clothing/face is clothing-resource specific.
--- This section has two independent halves:
---   read  = how the SERVER reads a character's saved look out of the database
---            (so the selection preview shows their real clothing).
---   apply = how the CLIENT puts that look onto a ped (the preview ped) and onto
---            the real player on spawn.
---
--- Pick the preset that matches your clothing resource, or hand-tune the fields.
--- Ready-made presets are listed at the bottom of this block - copy one over the
--- values below. If you run 'none', the preview shows a clean freemode ped and
--- your framework/clothing resource dresses the real player on spawn as usual.
+-- Loading a saved character's clothing/face is appearance-resource specific.
+-- Set the resource you use and this script will try its common export. If your
+-- resource is not listed, extend Config.Appearance.apply in client/main.lua.
 Config.Appearance = {
-    resource = 'illenium-appearance', -- name of your clothing resource (for exports)
-
-    -- Fallback freemode models when no saved look exists / can't be read.
+    resource = 'illenium-appearance', -- 'illenium-appearance' | 'qbx_clothing' | 'fivem-appearance' | 'none'
+    -- Fallback freemode models when no saved appearance exists.
     fallbackMale = 'mp_m_freemode_01',
     fallbackFemale = 'mp_f_freemode_01',
 
-    -- READ: where the saved appearance lives.
-    read = {
-        -- 'table'  = a dedicated skins table keyed by the character id
-        --            (illenium-appearance `playerskins`, fivem-appearance, etc.)
-        -- 'inline' = a column on the character row itself
-        --            (ESX `users.skin`, old qb-clothing `players.skin`)
-        -- 'none'   = don't read; preview is always a default freemode ped
-        source = 'table',
-        table = 'playerskins',      -- (source='table') skins table name
-        idColumn = 'citizenid',     -- (source='table') key column in that table
-        column = 'skin',            -- JSON column holding the saved look
-        activeColumn = 'active',    -- (source='table') only the row with active=1; false to ignore
-    },
-
-    -- APPLY: how the client dresses a ped / the player.
-    apply = {
-        -- 'export'     = call an export that accepts a ped (illenium-appearance,
-        --                fivem-appearance). Previews the exact look on the ped.
-        -- 'skinchanger'= ESX classic (esx_skin + skinchanger). Component-map data
-        --                is applied to the preview ped natively (best effort) and
-        --                to the player via skinchanger events.
-        -- 'event'      = fire a player-only event to (re)load the player's outfit
-        --                (qb-clothing). The preview shows a default ped.
-        -- 'none'       = never apply; preview + player use default peds and your
-        --                framework handles dressing on spawn.
-        method = 'export',
-
-        -- (method='export') exports[resource][pedExport](ped, data)
-        pedExport = 'setPedAppearance',
-        -- (method='export') exports[resource][playerExport](data) - also sets model
-        playerExport = 'setPlayerAppearance',
-
-        -- (method='event') event fired client-side to load the player's saved
-        -- outfit after spawn (no ped preview).
-        playerEvent = 'qb-clothing:client:loadPlayerClothing',
-
-        -- Optional: event fired for a BRAND-NEW character so the clothing resource
-        -- opens its creator (so the character gets a saved look). Leave nil if your
-        -- framework/clothing resource opens the creator itself (ESX does this via
-        -- esx_identity/esx_skin). Illenium (QB): 'illenium-appearance:client:createFirstCharacter'.
-        newCharacterEvent = 'illenium-appearance:client:createFirstCharacter',
-    },
+    -- illenium-appearance (QB) stores each character's saved look in the
+    -- `playerskins` table, `skin` column (JSON), keyed by `citizenid`, with an
+    -- `active = 1` flag marking the current one. (Older qb-clothing setups used
+    -- `players`.`skin` - switch back to that if yours does.)
+    skinTable = 'playerskins',
+    skinIdColumn = 'citizenid',
+    skinColumn = 'skin',            -- JSON column holding the saved appearance
+    skinActiveColumn = 'active',    -- only read the active skin (set false to ignore)
+    -- illenium export used to apply the clothing/face after we set the model
+    -- ourselves. 'setPedAppearance' applies components/props/face/hair/tattoos
+    -- (no model). 'setPlayerAppearance' would also re-set the model.
+    applyExport = 'setPedAppearance',
 }
-
--- Presets (copy the matching block over Config.Appearance above):
---
--- illenium-appearance (QB / Qbox):
---   resource='illenium-appearance',
---   read  = { source='table', table='playerskins', idColumn='citizenid', column='skin', activeColumn='active' }
---   apply = { method='export', pedExport='setPedAppearance', playerExport='setPlayerAppearance' }
---
--- illenium-appearance (ESX):  (skin stored inline on users.skin)
---   resource='illenium-appearance',
---   read  = { source='inline', column='skin' }
---   apply = { method='export', pedExport='setPedAppearance', playerExport='setPlayerAppearance' }
---
--- fivem-appearance (QB or ESX):
---   resource='fivem-appearance',
---   read  = { source='table', table='playerskins', idColumn='citizenid', column='skin', activeColumn='active' }  -- QB
---   -- or read = { source='inline', column='skin' }  -- ESX
---   apply = { method='export', pedExport='setPedAppearance', playerExport='setPlayerAppearance' }
---
--- esx_skin + skinchanger (ESX classic):
---   resource='skinchanger',
---   read  = { source='inline', column='skin' }
---   apply = { method='skinchanger' }
---
--- qb-clothing (QBCore classic):
---   resource='qb-clothing',
---   read  = { source='none' }         -- qb-clothing loads on player load itself
---   apply = { method='event', playerEvent='qb-clothing:client:loadPlayerClothing' }
---
--- none (let your framework dress the player; preview is a default ped):
---   read = { source='none' }, apply = { method='none' }
 
 -- ---------------------------------------------------------------------------
 -- Default UI settings (a player can change these; they are stored client side
@@ -368,6 +311,65 @@ Config.WeatherOptions = {
 }
 
 -- ---------------------------------------------------------------------------
+-- Partner system
+-- ---------------------------------------------------------------------------
+-- Two players who both have the character screen open can pair up and perform
+-- synced paired emotes. "couple" uses the romantic packs you streamed;
+-- "friend" uses built-in friendly paired anims (no extra files needed).
+Config.Partner = {
+    enabled = true,
+    searchMinChars = 1,     -- min characters before a name search runs
+    requestTimeout = 120,   -- seconds an invite stays in the Incoming tab (prompt shows for 10s)
+    sceneZOffset = 0.98,    -- raises the paired-emote origin so peds don't sink
+
+    -- Blend-in speed for paired emotes. This controls the lead-in you see before
+    -- the couple settles into the final pose:
+    --   1.5 = a soft, visible "move into the emote" transition (default)
+    --   8.0 = snap straight into the pose with no lead-in
+    emoteBlendIn = 1.5,
+
+    -- Streamed anim dictionaries this resource ships (in stream/). Listed so the
+    -- client can preload/verify them. Do not rename unless you rename the .ycd.
+    streamedDicts = {
+        'mx@couple1_a', 'mx@couple1_b', 'mx@couple2_a', 'mx@couple2_b',
+        'mx@couple3_a', 'mx@couple3_b', 'mx@couplephone_m', 'mx@couplephone_f',
+        'mx@piggypack_a', 'mx@piggypack_b', 'mx@pack4.1_a', 'mx@pack4.1_b',
+        'mx@couple4.2_a', 'mx@couple4.2_b', 'mx@couple4.3_a', 'mx@couple4.3_b',
+        'mx@couple4.4_a', 'mx@couple4.4_b', 'mx@couple4.5_a', 'mx@couple4.5_b',
+    },
+
+    -- Each emote is a paired clip: the inviter plays 'a', the target plays 'b'.
+    -- Optional per-emote flags:
+    --   upperBody  = play the emote on the upper body only (legs stay free)
+    --   walk       = with upperBody, the legs do a walk cycle so it reads as
+    --                "walking together" (the peds stand side by side)
+    --   sideOffset = spacing between the two peds for the upper-body path
+    emotes = {
+        couple = {
+            { label = 'Embrace',      a = { dict = 'mx@couple1_a', clip = 'mx@couple1_a_clip' }, b = { dict = 'mx@couple1_b', clip = 'mx@couple1_b_clip' } },
+            { label = 'Hold Close',   a = { dict = 'mx@couple2_a', clip = 'mx@couple2_clip' },   b = { dict = 'mx@couple2_b', clip = 'mx@couple2b_clip' } },
+            { label = 'Slow Dance',   a = { dict = 'mx@couple3_a', clip = 'mx@couple3_a_clip' }, b = { dict = 'mx@couple3_b', clip = 'mx@couple3_b_clip' } },
+            { label = 'Phone Cuddle', a = { dict = 'mx@couplephone_m', clip = 'mx@couplephone_m_clip' }, b = { dict = 'mx@couplephone_f', clip = 'mx@couplephone_f_clip' } },
+            { label = 'Piggyback',    a = { dict = 'mx@piggypack_a', clip = 'mxclip_a' },         b = { dict = 'mx@piggypack_b', clip = 'mxanim_b' } },
+            { label = 'Pack 4.1',     a = { dict = 'mx@pack4.1_a', clip = 'mx@pack4.1_a_clip' },  b = { dict = 'mx@pack4.1_b', clip = 'mx@pack4.1_b_clip' } },
+            { label = 'Pack 4.2',     a = { dict = 'mx@couple4.2_a', clip = 'mx@couple4.2_a_clip' }, b = { dict = 'mx@couple4.2_b', clip = 'mx@couple4.2_b_clip' } },
+            { label = 'Pack 4.3',     a = { dict = 'mx@couple4.3_a', clip = 'mx@couple4.3_a_clip' }, b = { dict = 'mx@couple4.3_b', clip = 'mx@couple4.3_b_clip' } },
+            { label = 'Pack 4.4',     a = { dict = 'mx@couple4.4_a', clip = 'mx@couple4.4_a_clip' }, b = { dict = 'mx@couple4.4_b', clip = 'mx@couple4.4_b_clip' } },
+            { label = 'Pack 4.5',     a = { dict = 'mx@couple4.5_a', clip = 'mx@couple4.5_a_clip' }, b = { dict = 'mx@couple4.5_b', clip = 'mx@couple4.5_b_clip' } },
+            -- Upper-body demo: legs walk in step, arms free (swap the a/b clips
+            -- for a real hold-hands upper-body anim if you have one).
+            { label = 'Walk Together', upperBody = true, walk = true, sideOffset = 0.5,
+              a = { dict = 'amb@world_human_hang_out_street@male_c@base', clip = 'base' },
+              b = { dict = 'amb@world_human_hang_out_street@male_c@base', clip = 'base' } },
+        },
+        friend = {
+            { label = 'Bro Hug',   a = { dict = 'mp_ped_interaction', clip = 'hugs_guy_a' },      b = { dict = 'mp_ped_interaction', clip = 'hugs_guy_b' } },
+            { label = 'Handshake', a = { dict = 'mp_ped_interaction', clip = 'handshake_guy_a' }, b = { dict = 'mp_ped_interaction', clip = 'handshake_guy_b' } },
+        },
+    },
+}
+
+-- ---------------------------------------------------------------------------
 -- Camera filters
 -- ---------------------------------------------------------------------------
 -- These are applied game-side so they actually affect the scene:
@@ -393,27 +395,35 @@ Config.PostLogin = {
     teleportToLast = true,  -- move the player to their character's last saved position
     defaultSpawn = vec4(-1035.7, -2731.6, 12.8, 240.0), -- fallback / new-character spawn (LSIA)
 
-    -- Guarantee the player lands on the correct freemode ped by gender
-    -- (mp_m_freemode_01 / mp_f_freemode_01) BEFORE the clothing resource runs.
+    -- FIX: guarantee the player lands on the correct freemode ped by gender
+    -- (mp_m_freemode_01 / mp_f_freemode_01) BEFORE the appearance resource runs.
     -- Without this you keep whatever ped the game spawned you as (a story ped
-    -- like Michael) whenever the saved look does not set a model itself, which
-    -- is the "I don't spawn as my freemode ped" bug. The clothing resource then
-    -- just layers the saved clothing/face on top of this clean base.
+    -- like Michael) whenever the saved skin does not set a model itself, which
+    -- is exactly the "I don't spawn as my freemode ped" bug. illenium then just
+    -- layers the saved clothing/face on top of this clean base.
     forceFreemodeModel = true,
 
-    -- Apply the character's saved look to the real player ped on spawn, using
-    -- Config.Appearance.apply. Turn this OFF only if your framework/clothing
-    -- resource already dresses the player automatically on load (e.g. some
-    -- illenium/qb-clothing setups load the skin on the framework's player-loaded
-    -- event, in which case a second apply here is redundant).
+    setModel = false,
+    -- Apply the character's saved look (model + clothing) to the player ped on
+    -- spawn, using the appearance the server read from the skin table and
+    -- Config.Appearance.applyExport (illenium's setPlayerAppearance). This is the
+    -- reliable way to guarantee the correct ped: this resource shows the character
+    -- on a SEPARATE preview ped during selection, so nothing sets the real player
+    -- ped unless we do it here. Leave ON for illenium/qbx.
     applyAppearance = true,
 
-    -- Some clothing resources dress the player themselves on the framework's
-    -- player-loaded event, so this resource doesn't need to. Set to false to let
-    -- this resource apply the look on spawn (via Config.Appearance.apply).
-    -- Leave true if your clothing resource loads the skin on player-load itself
-    -- (default illenium-appearance / qb-clothing behaviour).
-    clothingLoadsItself = false,
+    -- EXISTING characters: illenium loads the saved model + clothing itself on
+    -- 'QBCore:Client:OnPlayerLoaded' when the player logs in, so this resource no
+    -- longer triggers a reload (doing so raced illenium's cache and crashed it).
+    -- Kept here only for reference / non-illenium setups.
+    loadClothingEvent = 'illenium-appearance:client:reloadSkin',
+    -- NEW character: open illenium's appearance creator so the character actually
+    -- gets a saved look (without this, new chars spawn as a default ped forever).
+    newCharacterEvent = 'illenium-appearance:client:createFirstCharacter',
+
+    -- If you switch away from illenium and want this resource to spawn the ped
+    -- itself, set setModel/applyAppearance = true, clear the two events above, and
+    -- make sure Config.Appearance (skinTable/applyExport) matches your resource.
 }
 
 -- ---------------------------------------------------------------------------
@@ -462,4 +472,79 @@ Config.Brand = {
     logo = 'img/logo.svg',
 }
 
+-- ---------------------------------------------------------------------------
+-- Scene Maker
+-- ---------------------------------------------------------------------------
+-- An in-game tool (/scene) that lets a player pose their character, frame the
+-- camera, and set the time/weather, then SAVE it as that character's personal
+-- backdrop in the selector. Saved per character (forger_scenes table).
+Config.SceneMaker = {
+    enabled = true,
+    command = 'scene',          -- /scene to open the builder (in-game)
 
+    restricted = false,         -- true = require the ace below
+    ace = 'forger.scene',
+
+    -- Orbit camera rig for framing the shot. angle = azimuth around the ped,
+    -- height = metres above feet, distance = zoom out, fov, speed = auto-orbit.
+    camera = {
+        defaults = { angle = 200.0, height = 0.55, distance = 3.4, fov = 45.0, speed = 0.0 },
+        limits   = { height = { -0.5, 2.5 }, distance = { 1.5, 9.0 }, fov = { 25.0, 65.0 } },
+        steps    = { orbit = 3.0, height = 0.08, distance = 0.25, fov = 2.0 },
+    },
+
+    -- Weathers offered in the picker.
+    weathers = {
+        'CLEAR', 'EXTRASUNNY', 'CLOUDS', 'OVERCAST', 'NEUTRAL',
+        'RAIN', 'THUNDER', 'CLEARING', 'FOGGY', 'SMOG', 'XMAS', 'SNOW', 'BLIZZARD',
+    },
+
+    -- Stances the ped can hold. Either a `scenario` (GTA world scenario) or a
+    -- `dict` + `anim` (+ optional `flag`). Grouped by `category` in the UI.
+    stances = {
+        { id = 'stand',     name = 'Stand',        category = 'Idle', scenario = 'WORLD_HUMAN_STAND_IMPATIENT' },
+        { id = 'stand_up',  name = 'Stand tall',   category = 'Idle', scenario = 'WORLD_HUMAN_STAND_IMPATIENT_UPRIGHT' },
+        { id = 'guard',     name = 'Guard',        category = 'Idle', scenario = 'WORLD_HUMAN_GUARD_STAND' },
+        { id = 'lean',      name = 'Lean',         category = 'Idle', scenario = 'WORLD_HUMAN_LEANING' },
+        { id = 'smoke',     name = 'Smoke',        category = 'Idle', scenario = 'WORLD_HUMAN_SMOKING' },
+        { id = 'phone',     name = 'On phone',     category = 'Idle', scenario = 'WORLD_HUMAN_STAND_MOBILE' },
+        { id = 'coffee',    name = 'Coffee',       category = 'Idle', scenario = 'WORLD_HUMAN_AA_COFFEE' },
+        { id = 'map',       name = 'Read map',     category = 'Idle', scenario = 'WORLD_HUMAN_TOURIST_MAP' },
+        { id = 'statue',    name = 'Statue',       category = 'Idle', scenario = 'WORLD_HUMAN_HUMAN_STATUE' },
+
+        { id = 'sit_ledge', name = 'Sit on ledge', category = 'Sit',  scenario = 'WORLD_HUMAN_SEAT_LEDGE' },
+        { id = 'sit_steps', name = 'Sit on steps', category = 'Sit',  scenario = 'WORLD_HUMAN_SEAT_STEPS' },
+        { id = 'sit_wall',  name = 'Sit on wall',  category = 'Sit',  scenario = 'WORLD_HUMAN_SEAT_WALL' },
+
+        { id = 'muscle',    name = 'Muscle flex',  category = 'Cool', scenario = 'WORLD_HUMAN_MUSCLE_FLEX' },
+        { id = 'superhero', name = 'Superhero',    category = 'Cool', scenario = 'WORLD_HUMAN_SUPERHERO' },
+        { id = 'slouch',    name = 'Slouch',       category = 'Cool', scenario = 'WORLD_HUMAN_BUM_STANDING' },
+
+        { id = 'binoculars',name = 'Binoculars',   category = 'Fun',  scenario = 'WORLD_HUMAN_BINOCULARS' },
+        { id = 'cheer',     name = 'Cheer',        category = 'Fun',  scenario = 'WORLD_HUMAN_CHEERING' },
+        { id = 'yoga',      name = 'Yoga',         category = 'Fun',  scenario = 'WORLD_HUMAN_YOGA' },
+        { id = 'sunbathe',  name = 'Sunbathe',     category = 'Fun',  scenario = 'WORLD_HUMAN_SUNBATHE_BACK' },
+        { id = 'salute',    name = 'Salute',       category = 'Fun',  dict = 'mp_player_int_uppersalute', anim = 'mp_player_int_salute', flag = 49 },
+        { id = 'wave',      name = 'Wave',         category = 'Fun',  dict = 'friends@frj@ig_1', anim = 'wave_a', flag = 49 },
+        { id = 'thumbsup',  name = 'Thumbs up',    category = 'Fun',  dict = 'anim@mp_player_intcelebrationmale@thumbs_up', anim = 'thumbs_up', flag = 49 },
+    },
+
+    -- Movement speed multiplier when repositioning the ped in the builder.
+    moveSpeed = 1.0,
+
+    -- How far the SAVED scene is pulled back when viewed in the selector, relative
+    -- to how it was framed in the builder. The selector adds depth-of-field that
+    -- makes the subject read closer, so >1.0 gives a bit more breathing room.
+    viewZoomOut = 1.25,
+}
+
+-- Co-op scene building: invite nearby players into a shared, isolated session to
+-- build a scene together. Organizer controls time/weather/camera and saves;
+-- invitees pick their stance and place their own vehicles.
+Config.SceneMaker.coop = {
+    enabled = true,
+    maxInvitees = 4,        -- organizer + up to 4 others
+    inviteRadius = 14.0,    -- metres: how close a player must be to be invited
+    inviteTimeout = 30,     -- seconds before an invite expires
+    bucketBase = 720000,    -- routing-bucket range for isolated build sessions
+}

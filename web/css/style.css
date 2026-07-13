@@ -396,6 +396,100 @@ input[type='range']::-webkit-slider-thumb {
 .toast.err svg { color: #ff6b6b; }
 .toast.ok svg { color: var(--accent); }
 
+/* ---- partner panel -------------------------------------------------------*/
+.ptabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: var(--field); padding: 4px; border-radius: 10px; border: 1px solid var(--stroke); margin-bottom: 14px; }
+.ptab {
+    position: relative; font-family: var(--ui); font-size: 12.5px; font-weight: 600; color: var(--muted);
+    background: none; border: none; padding: 8px 4px; border-radius: 7px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.ptab svg { width: 14px; height: 14px; }
+.ptab.is-on { background: rgba(47,227,163,0.16); color: var(--accent); }
+.ptab .badge {
+    position: absolute; top: -5px; right: 6px; min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 8px; background: #ff5a5a; color: #2a0606; font-size: 10px; font-weight: 800;
+    display: grid; place-items: center;
+}
+
+.sendingas {
+    display: flex; align-items: center; gap: 8px; padding: 9px 12px; margin-bottom: 12px;
+    background: rgba(47,227,163,0.1); border: 1px solid rgba(47,227,163,0.3); border-radius: 10px;
+    font-size: 12px; color: var(--muted);
+}
+.sendingas svg { width: 15px; height: 15px; color: var(--accent); }
+.sendingas b { color: var(--text); font-weight: 600; }
+
+.psearch { position: relative; margin-bottom: 14px; }
+.psearch svg { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--muted-2); }
+.psearch input {
+    width: 100%; font-family: var(--ui); font-size: 14px; color: var(--text);
+    background: var(--field); border: 1px solid var(--stroke-2); border-radius: var(--radius-sm);
+    padding: 11px 12px 11px 36px; outline: none;
+}
+.psearch input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(47,227,163,0.15); }
+
+.plist { display: flex; flex-direction: column; gap: 8px; }
+.prow {
+    display: flex; align-items: center; gap: 11px; padding: 10px 12px;
+    background: var(--field); border: 1px solid var(--stroke); border-radius: var(--radius-sm);
+}
+.prow__ava { width: 34px; height: 34px; border-radius: 50%; background: rgba(255,255,255,0.08); display: grid; place-items: center; flex-shrink: 0; color: var(--muted); }
+.prow__ava svg { width: 17px; height: 17px; }
+.prow__meta { flex: 1; min-width: 0; }
+.prow__name { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow__sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.prow__acts { display: flex; gap: 6px; }
+.pbtn { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; border: 1px solid var(--stroke-2); background: var(--field); color: var(--muted); cursor: pointer; transition: all 0.14s ease; }
+.pbtn svg { width: 15px; height: 15px; }
+.pbtn:hover { color: var(--text); border-color: var(--stroke-2); }
+.pbtn--couple:hover { color: #ff6b8b; border-color: rgba(255,107,139,0.5); }
+.pbtn--friend:hover { color: var(--accent); border-color: var(--accent); }
+.pbtn--accept:hover { color: var(--accent); border-color: var(--accent); }
+.pbtn--decline:hover { color: #ff6b6b; border-color: rgba(255,107,107,0.5); }
+.prow__badge { font-size: 10px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; padding: 2px 7px; border-radius: 6px; }
+.prow__badge.couple { color: #ff8fa8; background: rgba(255,107,139,0.14); }
+.prow__badge.friend { color: var(--accent); background: rgba(47,227,163,0.14); }
+
+.pempty { text-align: center; padding: 40px 16px; color: var(--muted); }
+.pempty svg { width: 34px; height: 34px; opacity: 0.4; margin-bottom: 12px; }
+.pempty .t { font-size: 13px; font-weight: 600; color: var(--text); }
+.pempty .d { font-size: 12px; margin-top: 5px; line-height: 1.5; }
+
+/* match modal */
+.modal__icon.love { background: rgba(255,90,120,0.16); color: #ff5a78; }
+
+/* emote bar */
+.emotebar {
+    position: absolute; bottom: 30px; left: 50%; transform: translate(-50%, 20px);
+    display: none; align-items: center; gap: 6px;
+    background: var(--panel-solid); border: 1px solid var(--stroke); border-radius: 12px;
+    padding: 8px 8px; box-shadow: var(--shadow); z-index: 25;
+}
+.emotebar.show { display: flex; transform: translate(-50%, 0); }
+.emotebar__nav { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: var(--field); border: 1px solid var(--stroke); color: var(--text); cursor: pointer; }
+.emotebar__nav:hover { border-color: var(--stroke-2); }
+.emotebar__nav svg { width: 17px; height: 17px; }
+.emotebar__mid { min-width: 168px; text-align: center; padding: 0 6px; }
+.emotebar__label { font-size: 13px; font-weight: 700; }
+.emotebar__sub { font-size: 10px; color: var(--muted); margin-top: 1px; letter-spacing: 0.4px; text-transform: uppercase; }
+.emotebar__leave { margin-left: 4px; height: 36px; padding: 0 14px; border-radius: 9px; border: 1px solid rgba(255,107,107,0.4); background: rgba(255,90,90,0.12); color: #ff8080; font-family: var(--ui); font-weight: 600; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.emotebar__leave svg { width: 14px; height: 14px; }
+.emotebar__leave:hover { background: rgba(255,90,90,0.2); }
+
+/* top-left request notif */
+.notif {
+    position: absolute; top: 26px; left: 26px; display: none; align-items: center; gap: 12px;
+    background: var(--panel-solid); border: 1px solid var(--stroke); border-radius: 12px;
+    padding: 12px 16px; box-shadow: var(--shadow); z-index: 45; max-width: 340px;
+    animation: notif-in 0.3s ease both;
+}
+.notif.show { display: flex; }
+@keyframes notif-in { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.notif__ico { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; background: rgba(255,90,120,0.16); color: #ff5a78; flex-shrink: 0; }
+.notif__ico svg { width: 18px; height: 18px; }
+.notif__t { font-size: 13px; font-weight: 700; }
+.notif__d { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
 /* ---- camera filters ------------------------------------------------------*/
 /* Real colour grading + blur is done game-side (timecycle + DOF). These NUI
    overlays are translucent tints/vignettes that composite over the game as a
