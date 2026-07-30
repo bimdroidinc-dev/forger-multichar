@@ -1,14 +1,9 @@
--- Resolves how many character slots a given player is allowed.
--- default -> identifier overrides -> ace overrides -> discord role overrides,
--- combined with Config.Slots.resolution and clamped to absoluteMax.
-
 Slots = {}
 
 local function combine(current, candidate)
     if Config.Slots.resolution == 'sum' then
         return current + candidate
     end
-    -- 'highest'
     if candidate > current then return candidate end
     return current
 end
@@ -43,7 +38,6 @@ local function discordOverride(roles)
     return best
 end
 
--- Async because Discord lookups are async. cb(number).
 function Slots.resolve(src, cb)
     Discord.getRoles(src, function(roles)
         local allowed = Config.Slots.default

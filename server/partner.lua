@@ -1,18 +1,8 @@
--- Persistent partner system.
---
--- Pairings are stored by character citizenid, so they survive restarts. Whenever
--- a player views a paired character on the selection screen, their partner's
--- real character (with saved appearance) is cloned into their scene - even if
--- the partner is offline. Live invites still work and simply write the pairing.
+local presence = {}
+local incoming = {}
+local sent = {}
+local emoteIdx = {}
 
-local presence = {}   -- [src] = { citizenid, name, gender }  (current viewed char)
-local incoming = {}   -- [target] = { [fromSrc] = { mode, name, expires } }
-local sent = {}       -- [from]   = { [toSrc]   = { mode, name, expires } }
-local emoteIdx = {}   -- [citizenid] = current shared emote index (session only)
-
--- ---------------------------------------------------------------------------
--- database
--- ---------------------------------------------------------------------------
 CreateThread(function()
     MySQL.query([[CREATE TABLE IF NOT EXISTS forger_partners (
         citizenid VARCHAR(64) NOT NULL PRIMARY KEY,
@@ -40,7 +30,6 @@ local function dbClearPartner(cid)
     return row and row.partner or nil
 end
 
--- Fetch a character's saved appearance (JSON) + gender from the configured tables.
 local function fetchCharacterLook(cid)
     if not cid then return nil end
     local look = { gender = 0, appearance = nil }
@@ -81,9 +70,6 @@ local function onlineByCitizen(cid)
     return nil
 end
 
--- ---------------------------------------------------------------------------
--- request list helpers
--- ---------------------------------------------------------------------------
 local function pushLists(src)
     local inc, snt = {}, {}
     for fromId, r in pairs(incoming[src] or {}) do inc[#inc + 1] = { id = fromId, name = r.name, mode = r.mode } end
@@ -96,9 +82,6 @@ local function clearRequest(fromId, toId)
     if incoming[toId] then incoming[toId][fromId] = nil end
 end
 
--- ---------------------------------------------------------------------------
--- show / hide the partner for the character a player is currently viewing
--- ---------------------------------------------------------------------------
 local function evaluateShow(src)
     local p = presence[src]
     if not p or not p.citizenid then
@@ -126,9 +109,6 @@ local function evaluateShow(src)
     })
 end
 
--- ---------------------------------------------------------------------------
--- presence + current character
--- ---------------------------------------------------------------------------
 RegisterNetEvent('forger:server:partnerPresence', function(open)
     local src = source
     if open then
@@ -163,9 +143,6 @@ RegisterNetEvent('forger:server:partnerSetChar', function(data)
     end
 end)
 
--- ---------------------------------------------------------------------------
--- search
--- ---------------------------------------------------------------------------
 RegisterNetEvent('forger:server:partnerSearch', function(query)
     local src = source
     query = tostring(query or ''):lower()
@@ -185,9 +162,6 @@ RegisterNetEvent('forger:server:partnerSearch', function(query)
     TriggerClientEvent('forger:client:partnerSearchResults', src, { results = results })
 end)
 
--- ---------------------------------------------------------------------------
--- invite / respond / cancel
--- ---------------------------------------------------------------------------
 RegisterNetEvent('forger:server:partnerInvite', function(payload)
     local src = source
     if type(payload) ~= 'table' then return end
@@ -257,9 +231,6 @@ RegisterNetEvent('forger:server:partnerCancel', function(payload)
     pushLists(toId)
 end)
 
--- ---------------------------------------------------------------------------
--- emote sync
--- ---------------------------------------------------------------------------
 RegisterNetEvent('forger:server:partnerEmote', function(payload)
     local src = source
     local p = presence[src]
@@ -299,9 +270,6 @@ RegisterNetEvent('forger:server:partnerUnpair', function()
     TriggerClientEvent('forger:client:partnerEnded', src, { reason = 'ended' })
 end)
 
--- ---------------------------------------------------------------------------
--- cleanup on login / drop (presence only; the pairing is persistent)
--- ---------------------------------------------------------------------------
 AddEventHandler('forger:server:characterSelected', function(src)
     presence[src] = nil
 end)
@@ -320,7 +288,6 @@ AddEventHandler('playerDropped', function()
     end
 end)
 
--- expire stale requests
 CreateThread(function()
     while true do
         Wait(5000)

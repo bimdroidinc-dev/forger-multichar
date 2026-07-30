@@ -1,7 +1,6 @@
 Locales = Locales or {}
 
 Locales['en'] = {
-    -- generic
     ['play'] = 'Play',
     ['create'] = 'Create',
     ['delete'] = 'Delete',
@@ -13,7 +12,6 @@ Locales['en'] = {
     ['empty_slot'] = 'Empty Slot',
     ['new_character'] = 'New Character',
 
-    -- creation
     ['firstname'] = 'First name',
     ['lastname'] = 'Last name',
     ['dob'] = 'Date of birth',
@@ -24,7 +22,6 @@ Locales['en'] = {
     ['backstory'] = 'Backstory',
     ['create_character'] = 'Create character',
 
-    -- validation / errors (returned to NUI)
     ['err_slots_full'] = 'You have used all of your character slots.',
     ['err_invalid_name'] = 'That name is not allowed.',
     ['err_name_length'] = 'Names must be %s to %s characters.',
@@ -32,7 +29,6 @@ Locales['en'] = {
     ['err_generic'] = 'Something went wrong. Try again.',
     ['err_delete_disabled'] = 'Deleting characters is disabled on this server.',
 
-    -- success
     ['char_created'] = 'Character created.',
     ['char_deleted'] = 'Character deleted.',
 }

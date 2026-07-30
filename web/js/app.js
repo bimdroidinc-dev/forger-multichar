@@ -142,7 +142,7 @@
     function renderHints() {
         const hints = [
             { k: 'Enter', t: 'Play' },
-            { k: 'E', t: 'Change Pose' },
+            { k: 'E', t: 'Change Emote' },
             { k: 'J', t: 'Change Location' },
             { k: 'Z', t: 'Zoom' },
             { k: 'B', t: 'Cinematic Bars' },
@@ -295,7 +295,7 @@
         blip(440);
         const slot = currentSlot();
         post('preview', slot.type === 'char'
-            ? { gender: slot.data.gender, appearance: slot.data.appearance || null, scene: slot.data.scene || null, citizenid: slot.data.citizenid || null }
+            ? { gender: slot.data.gender, appearance: slot.data.appearance || null, scene: slot.data.scene || null, citizenid: slot.data.citizenid || null, jobName: slot.data.jobName || null, gangName: slot.data.gangName || null }
             : { gender: 0, __empty: true });
         sendPartnerChar();
     }
@@ -1068,7 +1068,7 @@
             applyFilter(state.filter);
             var backSlot = currentSlot();
             post('preview', backSlot.type === 'char'
-                ? { gender: backSlot.data.gender, appearance: backSlot.data.appearance || null, scene: backSlot.data.scene || null, citizenid: backSlot.data.citizenid || null }
+                ? { gender: backSlot.data.gender, appearance: backSlot.data.appearance || null, scene: backSlot.data.scene || null, citizenid: backSlot.data.citizenid || null, jobName: backSlot.data.jobName || null, gangName: backSlot.data.gangName || null }
                 : { gender: 0, __empty: true });
         } else if (d.action === 'setData') {
             applyData(d.data);
@@ -1110,7 +1110,7 @@
         // preview current
         const slot = currentSlot();
         post('preview', slot.type === 'char'
-            ? { gender: slot.data.gender, appearance: slot.data.appearance || null, scene: slot.data.scene || null, citizenid: slot.data.citizenid || null }
+            ? { gender: slot.data.gender, appearance: slot.data.appearance || null, scene: slot.data.scene || null, citizenid: slot.data.citizenid || null, jobName: slot.data.jobName || null, gangName: slot.data.gangName || null }
             : { gender: 0, __empty: true });
         sendPartnerChar();
     }

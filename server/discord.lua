@@ -1,10 +1,6 @@
--- Fetches a player's Discord guild roles for slot overrides.
--- Requires a bot in your guild with the "Server Members Intent" enabled and a
--- token set via the convar named in Config.Discord.tokenConvar.
-
 Discord = {}
 
-local cache = {} -- [discordId] = { roles = {...}, expires = os.time()+ttl }
+local cache = {}
 
 local function getDiscordId(src)
     for _, id in ipairs(GetPlayerIdentifiers(src) or {}) do
@@ -15,8 +11,6 @@ local function getDiscordId(src)
     return nil
 end
 
--- Returns a set-like table of role ids: { ['roleid'] = true, ... }
--- Callback style so the HTTP request never blocks the main thread.
 function Discord.getRoles(src, cb)
     if not Config.Discord.enabled then return cb({}) end
 

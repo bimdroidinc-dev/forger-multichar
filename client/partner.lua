@@ -1,7 +1,4 @@
--- Client side of the persistent partner system. Forwards NUI actions to the
--- server, relays server events to the NUI, and shows/hides the partner scene.
-
-local pair = nil -- { mode, emoteIndex, selfRole, partnerGender, appearance }
+local pair = nil
 
 local function emoteFor(mode, index)
     local list = Config.Partner.emotes[mode]
@@ -21,9 +18,6 @@ local function startScene()
     end
 end
 
--- ---------------------------------------------------------------------------
--- NUI -> server
--- ---------------------------------------------------------------------------
 RegisterNUICallback('partnerSetChar', function(data, cb)
     TriggerServerEvent('forger:server:partnerSetChar', {
         citizenid = data.citizenid, name = data.name, gender = data.gender,
@@ -65,9 +59,6 @@ RegisterNUICallback('partnerUnpair', function(_, cb)
     cb('ok')
 end)
 
--- ---------------------------------------------------------------------------
--- server -> client
--- ---------------------------------------------------------------------------
 RegisterNetEvent('forger:client:partnerYourId', function(data)
     SendNUIMessage({ action = 'partnerYourId', id = data.id })
 end)
@@ -80,7 +71,6 @@ RegisterNetEvent('forger:client:partnerSearchResults', function(data)
     SendNUIMessage({ action = 'partnerSearchResults', results = data.results })
 end)
 
--- direct confirmation prompt (replaces the old passive notification)
 RegisterNetEvent('forger:client:partnerPrompt', function(data)
     SendNUIMessage({ action = 'partnerPrompt', fromId = data.fromId, name = data.name, mode = data.mode })
 end)
@@ -93,7 +83,6 @@ RegisterNetEvent('forger:client:partnerMatched', function(data)
     SendNUIMessage({ action = 'partnerMatched', mode = data.mode })
 end)
 
--- show / clone the partner for the current character
 RegisterNetEvent('forger:client:partnerShow', function(data)
     pair = {
         mode = data.mode,

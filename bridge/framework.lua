@@ -1,7 +1,3 @@
--- Server side framework bridge.
--- Only the login / create handoff is framework specific. Reading and deleting
--- rows is done with plain oxmysql in server/main.lua so it works everywhere.
-
 FW = { name = 'unknown', core = nil }
 
 local function detect()
@@ -22,27 +18,23 @@ local function detect()
 end
 
 CreateThread(function()
-    -- give cores a moment to start
     Wait(500)
     detect()
 end)
 
--- Build a charinfo table both cores understand.
 local function buildCharInfo(data)
     return {
         firstname = data.firstname,
         lastname = data.lastname,
         birthdate = data.birthdate,
-        gender = data.gender,            -- 0 male, 1 female
+        gender = data.gender,
         nationality = data.nationality,
-        backstory = data.backstory,      -- custom, safe to store
-        phone = nil,                     -- let framework generate
+        backstory = data.backstory,
+        phone = nil,
         account = nil,
     }
 end
 
--- Which citizenid (if any) this player is currently loaded as. nil while they
--- are still on the character screen (not logged into any character yet).
 local function currentCitizenId(src)
     if FW.name == 'qbx' then
         local ok, p = pcall(function() return exports.qbx_core:GetPlayer(src) end)
@@ -55,12 +47,71 @@ local function currentCitizenId(src)
     return nil
 end
 
--- True if the player is already logged in as exactly this character.
 function FW.IsLoggedInAs(src, citizenid)
     return currentCitizenId(src) == citizenid
 end
 
--- Log the player out of their current character (used before switching).
+-- qb-core registers commands per-character; without this the player has none until
+-- they reconnect. qbx does it itself.
+function FW.RefreshCommands(src)
+    if FW.name == 'qb' and FW.core then
+        pcall(function() FW.core.Commands.Refresh(src) end)
+    end
+end
+
+function FW.GetPlayer(src)
+    if FW.name == 'qbx' then
+        local ok, p = pcall(function() return exports.qbx_core:GetPlayer(src) end)
+        if ok then return p end
+    elseif FW.name == 'qb' and FW.core then
+        return FW.core.Functions.GetPlayer(src)
+    end
+    return nil
+end
+
+local loadedState = {}
+
+local function markLoaded(src)
+    src = tonumber(src)
+    if src then loadedState[src] = true end
+end
+
+AddEventHandler('QBCore:Server:PlayerLoaded', function(player)
+    local src = player and player.PlayerData and player.PlayerData.source
+    markLoaded(src)
+end)
+AddEventHandler('qbx_core:server:playerLoaded', function(player)
+    local src = player and player.PlayerData and player.PlayerData.source
+    markLoaded(src)
+end)
+
+AddEventHandler('QBCore:Server:OnPlayerUnload', function(src) loadedState[tonumber(src) or 0] = nil end)
+AddEventHandler('qbx_core:server:playerLoggedOut', function(src) loadedState[tonumber(src) or 0] = nil end)
+AddEventHandler('playerDropped', function() loadedState[source] = nil end)
+
+function FW.ClearLoaded(src)
+    loadedState[tonumber(src) or 0] = nil
+end
+
+-- FW.Login returning true only means the call was accepted; the core still has
+-- async work to do (money, job, metadata, inventory). Replying to the client
+-- before its PlayerLoaded event fires is what left the server thinking the player
+-- had never loaded in.
+function FW.WaitForLoaded(src, timeoutMs)
+    if loadedState[src] then return true end
+    local deadline = GetGameTimer() + (tonumber(timeoutMs) or 10000)
+    while GetGameTimer() < deadline do
+        if loadedState[src] then return true end
+        local p = FW.GetPlayer(src)
+        if p and p.PlayerData and p.PlayerData.citizenid then
+            markLoaded(src)
+            return true
+        end
+        Wait(50)
+    end
+    return false
+end
+
 function FW.Logout(src)
     if FW.name == 'qbx' then
         pcall(function() exports.qbx_core:Logout(src) end)
@@ -69,35 +120,28 @@ function FW.Logout(src)
     end
 end
 
--- Load an EXISTING character and hand off to the framework spawn flow.
----@return boolean ok, string? err
 function FW.Login(src, citizenid)
-    -- IDEMPOTENT: if this player is already loaded as this exact character, do
-    -- nothing. Re-running the core's Login on an already-loaded player is what
-    -- some cores / anti-cheats flag as an exploit. This happens when the player
-    -- opens the spawn selector, presses Back, then presses Play again.
+    -- IDEMPOTENT: re-running the core's Login on an already-loaded player is what some
+    -- cores and anti-cheats flag as an exploit. Happens when a player opens the spawn
+    -- selector, presses Back, then presses Play again.
     if FW.IsLoggedInAs(src, citizenid) then
         return true, nil
     end
-    -- Switching from a DIFFERENT already-loaded character: log the old one out
-    -- first so the core does a clean load rather than a double login.
     if currentCitizenId(src) then
         FW.Logout(src)
         Wait(200)
     end
+    FW.ClearLoaded(src)
 
     if FW.name == 'qbx' then
-        -- IMPORTANT: log in through the qb-core BRIDGE (core.Player.Login), not
-        -- exports.qbx_core:Login. The bridge fires 'QBCore:Client:OnPlayerLoaded',
-        -- which is the event illenium-appearance (QB path) listens for to auto-load
-        -- the saved skin. qbx_core:Login does not, so the appearance never loads.
-        -- Requires the qbx bridge: setr qbx:enablebridge true
+        -- Log in through the qb-core BRIDGE, not exports.qbx_core:Login. The bridge fires
+        -- QBCore:Client:OnPlayerLoaded, which is what illenium-appearance listens for to
+        -- auto-load the saved skin. Requires: setr qbx:enablebridge true
         local ok, success = pcall(function()
             local core = exports['qb-core']:GetCoreObject()
             return core.Player.Login(src, citizenid) and true or false
         end)
         if ok then return success == true, nil end
-        -- bridge unavailable: fall back to native qbx login
         local ok2, reason = exports.qbx_core:Login(src, citizenid)
         return ok2 == true, reason
     elseif FW.name == 'qb' then
@@ -108,10 +152,9 @@ function FW.Login(src, citizenid)
     return false, 'no framework'
 end
 
--- Create a NEW character then log into it.
----@return boolean ok, string? err
 function FW.CreateAndLogin(src, data, cid)
     local charinfo = buildCharInfo(data)
+    FW.ClearLoaded(src)
 
     if FW.name == 'qbx' then
         local newData = {
@@ -123,7 +166,6 @@ function FW.CreateAndLogin(src, data, cid)
 
     elseif FW.name == 'qb' then
         if not FW.core then return false, 'core missing' end
-        -- qb-core creates on Login when passed a newData table and citizenid=false.
         local newData = {
             cid = cid,
             charinfo = charinfo,

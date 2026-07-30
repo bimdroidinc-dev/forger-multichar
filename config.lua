@@ -1,37 +1,18 @@
 Config = {}
 
--- ---------------------------------------------------------------------------
--- Framework
--- ---------------------------------------------------------------------------
--- 'auto' will try to detect qbx_core, then qb-core. Force one if detection is
--- ever wrong on your server.
+-- Framework -------------------------------------------------------------------
+
 Config.Framework = 'auto' -- 'auto' | 'qbx' | 'qb'
+Config.AutoOpen = true    -- open the selector when a client's session starts
 
--- Open the selector automatically the first time a client's session starts.
--- If your core (qbx_core / qb-multicharacter) already opens its own selector,
--- disable that one and either keep this true, or set this false and trigger
--- 'forger:client:open' from your connect flow.
-Config.AutoOpen = true
-
--- /logout command: logs the player out of their current character (the framework
--- saves their position + data) and re-opens this character selector, so they can
--- switch characters. This mirrors qbx_core's built-in logout, which is what
--- mil-multichar hooks into.
 Config.Logout = {
     enabled = true,
-    command = 'logout',       -- chat command name (players type /logout)
-
-    -- Permission. Leave restricted = false so any player can switch characters
-    -- (the normal expectation). Set restricted = true to lock it behind an ace,
-    -- then grant it with, e.g.:  add_ace group.admin forger.logout allow
-    restricted = false,
+    command = 'logout',
+    restricted = false,   -- true = require the ace below
     ace = 'forger.logout',
-
-    -- Optional cooldown (seconds) between uses per player, to stop spam.
-    cooldown = 2,
+    cooldown = 2,         -- seconds between uses, per player
 }
 
--- Name of the players table and its columns (QB / Qbox default schema).
 Config.DB = {
     table = 'players',
     columnLicense = 'license',
@@ -40,249 +21,329 @@ Config.DB = {
     columnMoney = 'money',
     columnJob = 'job',
     columnPosition = 'position',
-    columnLastUpdated = 'last_updated',
 }
 
--- ---------------------------------------------------------------------------
--- Character slots
--- ---------------------------------------------------------------------------
+-- Character slots -------------------------------------------------------------
+
 Config.Slots = {
-    -- Every player gets this many slots unless an override grants more.
     default = 2,
-
-    -- No override can ever push a player above this hard ceiling.
-    absoluteMax = 8,
-
-    -- When resolving overrides we take the HIGHEST value that applies, then
-    -- clamp it to absoluteMax. So a player who matches both a VIP license and a
-    -- VIP+ Discord role receives the larger of the two.
+    absoluteMax = 8,        -- no override can exceed this
     resolution = 'highest', -- 'highest' | 'sum'
 }
 
--- ---------------------------------------------------------------------------
--- Per-player overrides
--- ---------------------------------------------------------------------------
 Config.Overrides = {
-    -- By full identifier. Any identifier the player carries can be used here:
-    -- 'license:xxxxxxxx', 'license2:xxxx', 'discord:123', 'steam:110000...',
-    -- 'fivem:1234567', etc. The key must match the identifier exactly.
+    -- any identifier the player carries: license:, license2:, discord:, steam:, fivem:
     identifiers = {
         -- ['license:0a1b2c3d4e5f6a7b8c9d0e1f'] = 5,
-        -- ['discord:123456789012345678']       = 6,
     },
-
-    -- By ace permission. Grant with:  add_ace group.vip forger.slots.vip allow
-    -- Easiest option if you already run an admin/permissions setup.
+    -- grant with: add_ace group.vip forger.slots.vip allow
     aces = {
-        -- ['forger.slots.vip']  = 4,
-        -- ['forger.slots.vip2'] = 6,
-        -- ['group.admin']       = Config.Slots.absoluteMax,
+        -- ['forger.slots.vip'] = 4,
     },
-
-    -- By Discord role id (requires Config.Discord.enabled = true and a bot in
-    -- your guild). Role id -> slot count.
+    -- requires Config.Discord.enabled
     discordRoles = {
-        -- ['1234567890123456789'] = 5, -- VIP
-        -- ['9876543210987654321'] = 7, -- VIP+
+        -- ['1234567890123456789'] = 5,
     },
 }
 
--- ---------------------------------------------------------------------------
--- Discord role lookups
--- ---------------------------------------------------------------------------
--- The bot token is read from a server convar so it never lives in this file.
--- In server.cfg:  set forger_discord_token "YOUR_BOT_TOKEN"
--- The bot must be in the guild with the "Server Members Intent" enabled.
+-- server.cfg: set forger_discord_token "YOUR_BOT_TOKEN"
+-- The bot must be in the guild with the Server Members Intent enabled.
 Config.Discord = {
     enabled = false,
-    guildId = '',           -- your Discord server id
+    guildId = '',
     tokenConvar = 'forger_discord_token',
-    cacheSeconds = 300,     -- cache a player's roles this long to avoid rate limits
+    cacheSeconds = 300,
 }
 
--- ---------------------------------------------------------------------------
--- Character creation
--- ---------------------------------------------------------------------------
+-- Character creation ----------------------------------------------------------
+
 Config.Creation = {
     minNameLength = 2,
     maxNameLength = 20,
-    -- Nationalities offered in the create form dropdown.
+    allowNumbersInName = false,
+    startingMoney = { cash = 1500, bank = 5000 },
     nationalities = {
         'United States', 'United Kingdom', 'Canada', 'Nigeria', 'Mexico',
         'Germany', 'France', 'Japan', 'Brazil', 'South Africa', 'Australia',
     },
-    -- Starting cash/bank for a brand new character.
-    startingMoney = { cash = 1500, bank = 5000 },
-    -- Regex-ish character whitelist for names (applied server side too).
-    allowNumbersInName = false,
 }
 
-Config.Deletion = {
+Config.Deletion = { enabled = true }
+
+-- Starter items ---------------------------------------------------------------
+
+-- Given once, to brand new characters only, right after creation. Works with
+-- ox_inventory, qb-inventory or the core's own AddItem, detected in that order.
+--
+--   item     the item name as it appears in your items list
+--   amount   how many
+--   metadata optional table merged into the item's metadata
+--   slot     optional inventory slot to force
+--
+-- 'id_card' and 'driver_license' are special-cased: if you run an ID card
+-- resource (um-idcard, bl_idcard, qbx_idcard) it builds the licence for you,
+-- otherwise the character's name/DOB/gender are written into the metadata here.
+Config.StarterItems = {
     enabled = true,
-    requireConfirm = true,
+
+    items = {
+        { item = 'phone',          amount = 1 },
+        { item = 'id_card',        amount = 1 },
+        { item = 'driver_license', amount = 1 },
+        { item = 'water_bottle',   amount = 2 },
+        { item = 'sandwich',       amount = 2 },
+        -- { item = 'radio',       amount = 1 },
+        -- { item = 'lockpick',    amount = 1, metadata = { quality = 100 } },
+    },
+
+    -- Set false if your ID card resource hands out licences on its own.
+    giveIdCards = true,
 }
 
--- ---------------------------------------------------------------------------
--- Preview scene(s)
--- ---------------------------------------------------------------------------
--- Each location is a backdrop the player can cycle with the "Change Location"
--- key (J). ped = where the character preview stands, cam = the camera.
--- Only the ped spot + heading is needed now. The camera is computed in front
--- of the ped so it always frames the full body, regardless of location.
+-- Preview scene ---------------------------------------------------------------
+
+-- Backdrops cycled with J.
+--
+--   mode 1  over-the-shoulder portrait (default)
+--   mode 2  prop scenario - needs `scenario` naming a Config.PropScenarios entry
+--   mode 3  locked-off camera - needs `camCoords`, optionally fov/focusOffset/blurOptions
+--
+--   emote   { scenario = ... } or { dict = ..., anim = ... } or { animName = ... }
+--           omit it and a random Config.Emotes.list entry is used
+--   group   a job/gang name or list of them. A character whose job or gang
+--           matches sees ONLY that group's locations; everyone else sees the
+--           ungrouped ones.
 Config.Locations = {
     { label = 'Vespucci Beach', ped = vec4(-1211.5, -1470.6, 4.4, 300.0) },
     { label = 'Legion Square',  ped = vec4(195.1, -933.9, 30.69, 235.0) },
     { label = 'City Overlook',  ped = vec4(-1520.5, 840.5, 181.4, 120.0) },
+
+    {
+        label = 'Pier Railing',
+        ped = vec4(-1850.1, -1246.0, 8.6, 315.0),
+        emote = { scenario = 'WORLD_HUMAN_LEANING' },
+    },
+    {
+        label = 'Rooftop Drink',
+        ped = vec4(-980.1, 662.18, 165.66, 185.35),
+        mode = 2,
+        scenario = 'bar',
+    },
+    {
+        label = 'Alley Portrait',
+        ped = vec4(-2541.15, 2334.54, 33.06, 334.88),
+        camCoords = vec4(-2538.56, 2337.39, 33.56, 150.19),
+        mode = 3,
+        fov = 22.0,
+        focusOffset = vec3(0.0, 0.0, 0.55),
+        blurOptions = { near = 0.5, far = 5.0 },
+        emote = { scenario = 'WORLD_HUMAN_SMOKING' },
+    },
+
+    -- job / gang locked examples
+    -- {
+    --     label = 'Mission Row',
+    --     ped = vec4(444.37, -984.33, 30.69, 71.35),
+    --     group = { 'police', 'sheriff' },
+    --     emote = { scenario = 'WORLD_HUMAN_COP_IDLES' },
+    -- },
 }
 
--- Scenes used INSTEAD of Config.Locations when the character being viewed has a
--- couple (a saved partner). Cycled with the same location key. Per-scene `cam`:
---   view   = 'back' (camera behind the couple) or 'front' (default, see faces)
---   motion = 'pan' for a slow cinematic pan, or 'static' / 'sway' / 'orbit'
--- A scene with type = 'walk' makes the couple stroll from `from` to `to`, then
--- loop back to the start.
+Config.RandomLocationOnLoad = true -- start on a random location instead of the first
+
+-- One synchronised scene drives the ped AND its props, which is what keeps a
+-- bottle or glass glued to the hand. Prop models are hashes because these are the
+-- exact props the drink_3 clip was authored against.
+Config.PropScenarios = {
+    bar = {
+        dict = 'safe@trevor@ig_5',
+        anim = 'drink_3',
+        zOffset = 0.0,
+        rotZ = 20.67,
+        props = {
+            { model = 1360987401,  anim = 'drink_3_beer' },
+            { model = -1296774200, anim = 'drink_3_cam' },
+        },
+    },
+}
+
+-- Scenes used INSTEAD of Config.Locations when the viewed character has a partner.
+--   cam.view   'back' (camera behind the couple) or 'front'
+--   cam.motion 'static' | 'sway' | 'pan' | 'orbit' | 'push'
+--   type       'walk' makes the couple stroll from `from` to `to` and loop
 Config.CoupleLocations = {
-    -- 1. Overlook: back view of the couple looking out over the city, slow pan.
     {
         label = 'Overlook',
         ped = vec4(920.1934, -10.6644, 111.2755, 138.2280),
         cam = { view = 'back', motion = 'pan', panArc = 16.0, panSpeed = 0.018 },
     },
-    -- 2. Beach: normal front view.
     {
         label = 'Beach',
         ped = vec4(-1494.8589, -1305.7769, 4.2923, 110.3542),
         cam = { view = 'front', motion = 'static' },
     },
-    -- 3. Stroll: the couple walks from `from` to `to`, then loops to the start.
     {
         label = 'Stroll',
         type = 'walk',
         from = vec4(916.9807, 23.6701, 113.5521, 326.2358),
         to   = vec4(947.3136, 71.4556, 113.5484, 143.9492),
-        walkSpeed = 1.0,          -- 1.0 = normal walk, ~2.0 = jog
+        walkSpeed = 1.0,
         cam = { view = 'front', motion = 'static' },
     },
 }
 
--- Camera framing for the preview. Built from the ped's real position + facing,
--- so it's always in front of the character and never cut off.
---
--- `motion` makes the camera move on its own:
---   'static' - locked in place
---   'sway'   - gentle arc left/right in front of the ped (default, cinematic)
---   'orbit'  - slow continuous orbit all the way around
---   'push'   - slow dolly in and out
--- Any location in Config.Locations may override these with its own `cam = {}`.
-Config.Camera = {
-    motion = 'static',   -- default: no movement. Per-location `cam.motion` can override.
+-- Camera ----------------------------------------------------------------------
 
-    -- Zoom presets cycled in the menu (Z). 1 = close (default), 2 = medium,
-    -- 3 = far (full head-to-toe). Each sets how far the camera stands and where
-    -- it aims; tune freely.
+-- Two framing systems. SOLO shots use `offset` / `focus` / `soloFov`: the camera
+-- sits at a fixed offset in the PED'S OWN space, so the portrait reads the same
+-- at every location. PAIR and saved Scene Maker shots use the polar
+-- `distance` / `height` / `pointAt` / `fov` values, because they frame two or
+-- more subjects.
+Config.Camera = {
+    motion = 'static',  -- 'static' | 'sway' | 'orbit' | 'pan' | 'push'
+    posture = 'side',   -- 'side' = ped keeps its heading, 'front' = ped turns to camera
     defaultZoom = 1,
+
+    -- offset/focus: x = side, y = forward, z = up. Cycled with Z.
     zoom = {
-        { label = 'Close',  distance = 3.1, height = 0.48, pointAt = 0.5,  fov = 44.0 },
-        { label = 'Medium', distance = 4.3, height = 0.72, pointAt = 0.78, fov = 46.0 },
-        { label = 'Far',    distance = 5.8, height = 0.86, pointAt = 0.88, fov = 50.0 },
+        { label = 'Close',
+          offset = vec3(-1.2, 1.3, 0.55), focus = vec3(0.28, 0.0, 0.58), soloFov = 12.0,
+          distance = 3.1, height = 0.48, pointAt = 0.5,  fov = 44.0 },
+        { label = 'Medium',
+          offset = vec3(-1.5, 1.5, 0.60), focus = vec3(0.30, 0.0, 0.60), soloFov = 16.0,
+          distance = 4.3, height = 0.72, pointAt = 0.78, fov = 46.0 },
+        { label = 'Far',
+          offset = vec3(-2.0, 2.2, 0.72), focus = vec3(0.30, 0.0, 0.66), soloFov = 22.0,
+          distance = 5.8, height = 0.86, pointAt = 0.88, fov = 50.0 },
     },
 
-    swayArc = 14.0,    -- degrees to each side for 'sway'
-    swaySpeed = 0.05,  -- cycles per second for 'sway' (slow)
-    orbitSpeed = 3.0,  -- degrees per second for 'orbit' (slow)
-    pushAmount = 0.5,  -- metres in/out for 'push'
-    pushSpeed = 0.06,  -- cycles per second for 'push' (slow)
+    -- applied on top of the solo offsets while a mode 2 scenario is on screen
+    scenarioOffsetAdd = vec3(-0.3, 0.6, 0.15),
+    scenarioFovAdd = 6.0,
 
-    -- Widened relative to the CURRENT zoom while paired, so Close/Medium/Far
-    -- still work with a partner (added on top of the selected zoom preset).
+    swayArc = 14.0,
+    swaySpeed = 0.05,
+    orbitSpeed = 3.0,
+    pushAmount = 0.5,
+    pushSpeed = 0.06,
+
+    -- added to the selected zoom preset while a partner is in shot
     pairMotion = 'static',
     pairDistanceAdd = 1.3,
     pairHeightAdd = 0.2,
     pairPointAtAdd = 0.18,
     pairFovAdd = 5.0,
     pairSwayArc = 8.0,
-}
 
--- Idle poses cycled with the "Change Pose" key (E).
--- Idle animations cycled with E, split by gender. Index 1 is the default and
--- is a dance. The rest are the streamed pose packs (male pack for male peds,
--- QueenSisters ladies pack for female peds).
-Config.Poses = {
-    male = {
-        { dict = 'anim@amb@nightclub@dancers@crowddance_facedj@hi_intensity', anim = 'hi_dance_crowd_13_v2_male^1' }, -- dance
-        { dict = 'anim@amb@nightclub@mini@dance@dance_solo@male@var_a@', anim = 'high_center' },   -- dance
-        { dict = 'anim@amb@nightclub@mini@dance@dance_solo@male@var_b@', anim = 'high_center' },   -- dance
-        { dict = 'posepack1@diday', anim = 'posepack1_clip' },
-        { dict = 'posepack2@diday', anim = 'posepack2_clip' },
-        { dict = 'posepack3@diday', anim = 'posepack3_clip' },
-        { dict = 'posepack4@diday', anim = 'posepack4_clip' },
-        { dict = 'posepack5@diday', anim = 'posepack5_clip' },
-        { dict = 'posepack6@diday', anim = 'posepack6_clip' },
+    -- shallow depth of field on the character shot; a mode 3 location's
+    -- blurOptions overrides near/far
+    dof = {
+        enabled = true,
+        near = 0.5,
+        far = 2.0,
+        pairFar = 3.0,
+        strength = 1.0,
+        maxNearInFocus = 1.5,
+        focusBias = 2.0,
     },
-    female = {
-        { dict = 'anim@amb@nightclub@dancers@crowddance_facedj@hi_intensity', anim = 'hi_dance_crowd_13_v2_male^1' }, -- dance
-        { dict = 'anim@amb@nightclub@mini@dance@dance_solo@female@var_a@', anim = 'high_center' }, -- dance
-        { dict = 'anim@amb@nightclub@mini@dance@dance_solo@female@var_b@', anim = 'high_center' }, -- dance
-        { dict = 'cigarettestate@queensisters', anim = 'cigarette_clip' },
-        { dict = 'littelqueen@queensisters', anim = 'littelqueen_clip' },
-        { dict = 'littelqueen3@queensisters', anim = 'littelqueen3_clip' },
-        { dict = 'littlequeen2queensisters', anim = 'littlequeen2_clip' },
-        { dict = 'lovethislife@queensisters', anim = 'lovethislife_clip' },
+
+    -- slow push-in on the first open only; switches and location changes are instant
+    intro = {
+        enabled = true,
+        duration = 5000,
+        jitter = 0.3,
+        fovOffset = 3.0,
     },
 }
 
--- Show a random pose each time a character is displayed on load / when browsing
--- to a different character, instead of always starting on the first one. Changing
--- location or coming back from the spawn selector keeps the current pose.
-Config.RandomPoseOnLoad = true
+-- Emotes ----------------------------------------------------------------------
 
--- How fast a single idle pose (cycled with E) eases in. Matches the couple
--- lead-in (Config.Partner.emoteBlendIn) so the ped visibly moves into the pose
--- instead of snapping to it.
---   1.5 = soft lead-in (default)   8.0 = instant snap
-Config.PoseBlendIn = 1.5
+-- Cycled with E, and used as the random pick for any location without its own
+-- emote. Everything here ships with the base game: this resource has no stream/.
+--
+-- Emote menus animate the LOCAL PLAYER ped only and this resource previews on a
+-- separate ped, so an { animName = 'x' } emote is looked up in `aliases` first.
+-- An unresolved name falls back to a random `list` entry and logs a warning once.
+-- Prefer `scenario` or `dict`+`anim`, which work on any ped.
+Config.Emotes = {
+    resource = 'auto', -- 'auto' | 'rpemotes-reborn' | 'rpemotes' | 'scully_emotemenu' | 'native'
+    randomOnLoad = true,
 
--- Loop idle poses and couple emotes with a pause between cycles instead of a
--- continuous seamless loop. The emote plays through, holds briefly, then replays.
+    list = {
+        { scenario = 'WORLD_HUMAN_SMOKING' },
+        { scenario = 'WORLD_HUMAN_STAND_MOBILE' },
+        { scenario = 'WORLD_HUMAN_LEANING' },
+        { scenario = 'WORLD_HUMAN_AA_COFFEE' },
+        { scenario = 'WORLD_HUMAN_GUARD_STAND' },
+        { scenario = 'WORLD_HUMAN_STAND_IMPATIENT' },
+        { scenario = 'WORLD_HUMAN_MUSCLE_FLEX' },
+        { scenario = 'WORLD_HUMAN_TOURIST_MAP' },
+        { dict = 'anim@amb@nightclub@mini@dance@dance_solo@male@var_a@', anim = 'high_center' },
+        { dict = 'anim@amb@nightclub@mini@dance@dance_solo@female@var_a@', anim = 'high_center' },
+        { dict = 'anim@heists@humane_labs@finale@keycards', anim = 'ped_a_enter_loop', flag = 1 },
+        { dict = 'rcmnigel1bnmt_1b', anim = 'hola_amigo', flag = 1 },
+    },
+
+    aliases = {
+        texting = { dict = 'cellphone@', anim = 'cellphone_text_read_base', flag = 49 },
+        smoke   = { scenario = 'WORLD_HUMAN_SMOKING' },
+        lean    = { scenario = 'WORLD_HUMAN_LEANING' },
+        coffee  = { scenario = 'WORLD_HUMAN_AA_COFFEE' },
+        idle3   = { scenario = 'WORLD_HUMAN_STAND_IMPATIENT' },
+    },
+}
+
+Config.EmoteBlendIn = 1.5 -- 1.5 = soft lead-in, 8.0 = instant snap
+
+-- Only applies to dict+anim emotes; scenarios are a continuous hold.
 Config.EmoteLoop = {
     spaced = true,
-    gapSeconds = 1.4,     -- pause between the end of one cycle and the next
-    minCycleMs = 2200,    -- minimum time per cycle (for very short/held clips)
+    gapSeconds = 1.4,
+    minCycleMs = 2200,
 }
 
--- ---------------------------------------------------------------------------
--- Appearance
--- ---------------------------------------------------------------------------
--- Loading a saved character's clothing/face is appearance-resource specific.
--- Set the resource you use and this script will try its common export. If your
--- resource is not listed, extend Config.Appearance.apply in client/main.lua.
+-- Scene placement -------------------------------------------------------------
+
+Config.Scene = {
+    collisionTimeoutMs = 5000,
+    placeTolerance = 1.0, -- re-assert coords until the ped is this close
+    placeTimeoutMs = 3000,
+
+    -- true  = raycast down and stand the ped on the surface found (safest)
+    -- false = trust the Z in Config.Locations exactly
+    groundSnap = true,
+}
+
+-- Appearance ------------------------------------------------------------------
+
 Config.Appearance = {
     resource = 'illenium-appearance', -- 'illenium-appearance' | 'qbx_clothing' | 'fivem-appearance' | 'none'
-    -- Fallback freemode models when no saved appearance exists.
     fallbackMale = 'mp_m_freemode_01',
     fallbackFemale = 'mp_f_freemode_01',
 
-    -- illenium-appearance (QB) stores each character's saved look in the
-    -- `playerskins` table, `skin` column (JSON), keyed by `citizenid`, with an
-    -- `active = 1` flag marking the current one. (Older qb-clothing setups used
-    -- `players`.`skin` - switch back to that if yours does.)
+    -- where the saved look lives. illenium (QB) uses playerskins.skin keyed by
+    -- citizenid with active = 1; older qb-clothing used players.skin.
     skinTable = 'playerskins',
     skinIdColumn = 'citizenid',
-    skinColumn = 'skin',            -- JSON column holding the saved appearance
-    skinActiveColumn = 'active',    -- only read the active skin (set false to ignore)
-    -- illenium export used to apply the clothing/face after we set the model
-    -- ourselves. 'setPedAppearance' applies components/props/face/hair/tattoos
-    -- (no model). 'setPlayerAppearance' would also re-set the model.
+    skinColumn = 'skin',
+    skinActiveColumn = 'active',
+
+    -- 'setPedAppearance' applies components/props/face/hair/tattoos without
+    -- touching the model; 'setPlayerAppearance' would also re-set the model.
     applyExport = 'setPedAppearance',
 }
 
--- ---------------------------------------------------------------------------
--- Default UI settings (a player can change these; they are stored client side
--- via NUI messages only, nothing is written to disk here).
--- ---------------------------------------------------------------------------
+-- UI --------------------------------------------------------------------------
+
+Config.Brand = {
+    name = 'FORGER',
+    tag = 'MULTICHARACTER',
+    logo = 'img/logo.svg',
+}
+
 Config.DefaultSettings = {
-    theme = 'dark',        -- 'dark' | 'light' | 'auto'
-    weather = 'SNOW',      -- one of the weather keys in Config.WeatherOptions
+    theme = 'dark',          -- 'dark' | 'light' | 'auto'
+    weather = 'SNOW',
     hour = 20,
     minute = 0,
     menuStyle = 'cinematic', -- 'cinematic' | 'classic'
@@ -295,89 +356,22 @@ Config.DefaultSettings = {
     musicVolume = 30,
 }
 
--- Weather buttons shown in settings (key = GTA weather type, icon = lucide id).
 Config.WeatherOptions = {
-    { key = 'EXTRASUNNY', icon = 'sun',        label = 'Clear' },
-    { key = 'CLEAR',      icon = 'sun-dim',    label = 'Sunny' },
-    { key = 'CLOUDS',     icon = 'cloud',      label = 'Cloudy' },
-    { key = 'OVERCAST',   icon = 'cloudy',     label = 'Overcast' },
-    { key = 'SMOG',       icon = 'cloud-fog',  label = 'Smog' },
-    { key = 'RAIN',       icon = 'cloud-rain', label = 'Rain' },
-    { key = 'THUNDER',    icon = 'cloud-lightning', label = 'Thunder' },
-    { key = 'FOGGY',      icon = 'cloud-fog',  label = 'Fog' },
-    { key = 'SNOW',       icon = 'snowflake',  label = 'Snow' },
-    { key = 'BLIZZARD',   icon = 'wind',       label = 'Blizzard' },
-    { key = 'XMAS',       icon = 'thermometer', label = 'Frost' },
+    { key = 'EXTRASUNNY', icon = 'sun',              label = 'Clear' },
+    { key = 'CLEAR',      icon = 'sun-dim',          label = 'Sunny' },
+    { key = 'CLOUDS',     icon = 'cloud',            label = 'Cloudy' },
+    { key = 'OVERCAST',   icon = 'cloudy',           label = 'Overcast' },
+    { key = 'SMOG',       icon = 'cloud-fog',        label = 'Smog' },
+    { key = 'RAIN',       icon = 'cloud-rain',       label = 'Rain' },
+    { key = 'THUNDER',    icon = 'cloud-lightning',  label = 'Thunder' },
+    { key = 'FOGGY',      icon = 'cloud-fog',        label = 'Fog' },
+    { key = 'SNOW',       icon = 'snowflake',        label = 'Snow' },
+    { key = 'BLIZZARD',   icon = 'wind',             label = 'Blizzard' },
+    { key = 'XMAS',       icon = 'thermometer',      label = 'Frost' },
 }
 
--- ---------------------------------------------------------------------------
--- Partner system
--- ---------------------------------------------------------------------------
--- Two players who both have the character screen open can pair up and perform
--- synced paired emotes. "couple" uses the romantic packs you streamed;
--- "friend" uses built-in friendly paired anims (no extra files needed).
-Config.Partner = {
-    enabled = true,
-    searchMinChars = 1,     -- min characters before a name search runs
-    requestTimeout = 120,   -- seconds an invite stays in the Incoming tab (prompt shows for 10s)
-    sceneZOffset = 0.98,    -- raises the paired-emote origin so peds don't sink
-
-    -- Blend-in speed for paired emotes. This controls the lead-in you see before
-    -- the couple settles into the final pose:
-    --   1.5 = a soft, visible "move into the emote" transition (default)
-    --   8.0 = snap straight into the pose with no lead-in
-    emoteBlendIn = 1.5,
-
-    -- Streamed anim dictionaries this resource ships (in stream/). Listed so the
-    -- client can preload/verify them. Do not rename unless you rename the .ycd.
-    streamedDicts = {
-        'mx@couple1_a', 'mx@couple1_b', 'mx@couple2_a', 'mx@couple2_b',
-        'mx@couple3_a', 'mx@couple3_b', 'mx@couplephone_m', 'mx@couplephone_f',
-        'mx@piggypack_a', 'mx@piggypack_b', 'mx@pack4.1_a', 'mx@pack4.1_b',
-        'mx@couple4.2_a', 'mx@couple4.2_b', 'mx@couple4.3_a', 'mx@couple4.3_b',
-        'mx@couple4.4_a', 'mx@couple4.4_b', 'mx@couple4.5_a', 'mx@couple4.5_b',
-    },
-
-    -- Each emote is a paired clip: the inviter plays 'a', the target plays 'b'.
-    -- Optional per-emote flags:
-    --   upperBody  = play the emote on the upper body only (legs stay free)
-    --   walk       = with upperBody, the legs do a walk cycle so it reads as
-    --                "walking together" (the peds stand side by side)
-    --   sideOffset = spacing between the two peds for the upper-body path
-    emotes = {
-        couple = {
-            { label = 'Embrace',      a = { dict = 'mx@couple1_a', clip = 'mx@couple1_a_clip' }, b = { dict = 'mx@couple1_b', clip = 'mx@couple1_b_clip' } },
-            { label = 'Hold Close',   a = { dict = 'mx@couple2_a', clip = 'mx@couple2_clip' },   b = { dict = 'mx@couple2_b', clip = 'mx@couple2b_clip' } },
-            { label = 'Slow Dance',   a = { dict = 'mx@couple3_a', clip = 'mx@couple3_a_clip' }, b = { dict = 'mx@couple3_b', clip = 'mx@couple3_b_clip' } },
-            { label = 'Phone Cuddle', a = { dict = 'mx@couplephone_m', clip = 'mx@couplephone_m_clip' }, b = { dict = 'mx@couplephone_f', clip = 'mx@couplephone_f_clip' } },
-            { label = 'Piggyback',    a = { dict = 'mx@piggypack_a', clip = 'mxclip_a' },         b = { dict = 'mx@piggypack_b', clip = 'mxanim_b' } },
-            { label = 'Pack 4.1',     a = { dict = 'mx@pack4.1_a', clip = 'mx@pack4.1_a_clip' },  b = { dict = 'mx@pack4.1_b', clip = 'mx@pack4.1_b_clip' } },
-            { label = 'Pack 4.2',     a = { dict = 'mx@couple4.2_a', clip = 'mx@couple4.2_a_clip' }, b = { dict = 'mx@couple4.2_b', clip = 'mx@couple4.2_b_clip' } },
-            { label = 'Pack 4.3',     a = { dict = 'mx@couple4.3_a', clip = 'mx@couple4.3_a_clip' }, b = { dict = 'mx@couple4.3_b', clip = 'mx@couple4.3_b_clip' } },
-            { label = 'Pack 4.4',     a = { dict = 'mx@couple4.4_a', clip = 'mx@couple4.4_a_clip' }, b = { dict = 'mx@couple4.4_b', clip = 'mx@couple4.4_b_clip' } },
-            { label = 'Pack 4.5',     a = { dict = 'mx@couple4.5_a', clip = 'mx@couple4.5_a_clip' }, b = { dict = 'mx@couple4.5_b', clip = 'mx@couple4.5_b_clip' } },
-            -- Upper-body demo: legs walk in step, arms free (swap the a/b clips
-            -- for a real hold-hands upper-body anim if you have one).
-            { label = 'Walk Together', upperBody = true, walk = true, sideOffset = 0.5,
-              a = { dict = 'amb@world_human_hang_out_street@male_c@base', clip = 'base' },
-              b = { dict = 'amb@world_human_hang_out_street@male_c@base', clip = 'base' } },
-        },
-        friend = {
-            { label = 'Bro Hug',   a = { dict = 'mp_ped_interaction', clip = 'hugs_guy_a' },      b = { dict = 'mp_ped_interaction', clip = 'hugs_guy_b' } },
-            { label = 'Handshake', a = { dict = 'mp_ped_interaction', clip = 'handshake_guy_a' }, b = { dict = 'mp_ped_interaction', clip = 'handshake_guy_b' } },
-        },
-    },
-}
-
--- ---------------------------------------------------------------------------
--- Camera filters
--- ---------------------------------------------------------------------------
--- These are applied game-side so they actually affect the scene:
---   dof       = real depth-of-field background blur on the scripted camera
---   timecycle = a CUSTOM timecycle modifier (shipped in timecycle_mods.xml,
---               NOT a stock GTA one) for colour grading
---   strength  = 0..1 timecycle strength
--- The NUI also shows a matching subtle vignette/tint as a cue.
+-- dof = real depth-of-field blur; timecycle = a custom modifier from
+-- timecycle_mods.xml (not a stock GTA one)
 Config.Filters = {
     hd       = { timecycle = 'forger_hd',     strength = 1.0 },
     portrait = { dof = true },
@@ -385,122 +379,148 @@ Config.Filters = {
     golden   = { timecycle = 'forger_golden', strength = 1.0 },
 }
 
--- ---------------------------------------------------------------------------
--- Post-login spawn
--- ---------------------------------------------------------------------------
--- Because this resource replaces your framework's multichar, it also hands the
--- player off to spawn after they pick a character. Without this you'd be left
--- standing at the character-select spot.
-Config.PostLogin = {
-    teleportToLast = true,  -- move the player to their character's last saved position
-    defaultSpawn = vec4(-1035.7, -2731.6, 12.8, 240.0), -- fallback / new-character spawn (LSIA)
+-- Partner system --------------------------------------------------------------
 
-    -- FIX: guarantee the player lands on the correct freemode ped by gender
-    -- (mp_m_freemode_01 / mp_f_freemode_01) BEFORE the appearance resource runs.
-    -- Without this you keep whatever ped the game spawned you as (a story ped
-    -- like Michael) whenever the saved skin does not set a model itself, which
-    -- is exactly the "I don't spawn as my freemode ped" bug. illenium then just
-    -- layers the saved clothing/face on top of this clean base.
+Config.Partner = {
+    enabled = true,
+    searchMinChars = 1,
+    requestTimeout = 120, -- seconds an invite stays in the Incoming tab
+    sceneZOffset = 0.98,  -- global lift for the paired-scene origin
+    emoteBlendIn = 1.5,
+
+    -- All dictionaries below ship with the base game. Three entry forms:
+    --   { dict, m, f }         the viewed ped takes its own gender's clip,
+    --                          the partner takes the other
+    --   { dict, left, right }  left = viewed ped, right = partner
+    --   { a = {dict, clip}, b = {dict, clip} }  inviter plays a, target plays b
+    --
+    -- Per-emote fixes: zOffset (added to sceneZOffset), headingOffset (degrees),
+    -- upperBody, walk, sideOffset. Clips authored at ground level need
+    -- zOffset = -0.98; the side-on ones also need headingOffset = 90.0.
+    emotes = {
+        couple = {
+            { label = 'Quiet Moment', dict = 'timetable@trevor@ig_1',
+              m = 'ig_1_thedontknowwhy_trevor',         f = 'ig_1_thedontknowwhy_patricia' },
+            { label = 'Talking',      dict = 'timetable@trevor@ig_1',
+              m = 'ig_1_therearejustsomemoments_trevor', f = 'ig_1_therearejustsomemoments_patricia' },
+            { label = 'Looking Out',  dict = 'timetable@trevor@ig_1',
+              m = 'ig_1_thedesertissobeautiful_trevor',  f = 'ig_1_thedesertissobeautiful_patricia' },
+            { label = 'Hug',
+              a = { dict = 'mp_ped_interaction', clip = 'kisses_guy' },
+              b = { dict = 'mp_ped_interaction', clip = 'kisses_girl' },
+              zOffset = 0.0 },
+            { label = 'Walk Together', upperBody = true, walk = true, sideOffset = 0.5,
+              a = { dict = 'amb@world_human_hang_out_street@male_c@base', clip = 'base' },
+              b = { dict = 'amb@world_human_hang_out_street@male_c@base', clip = 'base' } },
+        },
+        friend = {
+            { label = 'Sarcastic',  dict = 'anim@mp_player_intcelebrationpaired@f_f_sarcastic',
+              left = 'sarcastic_left', right = 'sarcastic_right',
+              zOffset = -0.98, headingOffset = 90.0 },
+            { label = 'Fist Bump',  dict = 'anim@mp_player_intcelebrationpaired@f_f_fist_bump',
+              left = 'fist_bump_left', right = 'fist_bump_right',
+              zOffset = -0.98, headingOffset = 90.0 },
+            { label = 'Handshake',  dict = 'anim@mp_player_intcelebrationpaired@m_m_manly_handshake',
+              left = 'manly_handshake_left', right = 'manly_handshake_right',
+              zOffset = -0.98, headingOffset = 90.0 },
+            { label = 'Bro Hug',    dict = 'anim@mp_player_intcelebrationpaired@m_m_bro_hug',
+              left = 'bro_hug_left', right = 'bro_hug_right',
+              zOffset = -0.98, headingOffset = 90.0 },
+            { label = 'Friend Hug', dict = 'anim@mp_player_intcelebrationpaired@f_m_bro_hug',
+              left = 'bro_hug_left', right = 'bro_hug_right',
+              zOffset = -0.98, headingOffset = 90.0 },
+        },
+    },
+}
+
+-- Post-login spawn ------------------------------------------------------------
+
+Config.PostLogin = {
+    teleportToLast = true,
+    defaultSpawn = vec4(-1035.7, -2731.6, 12.8, 240.0),
+
+    -- force the correct freemode ped by gender before the appearance resource
+    -- runs, so a saved skin that sets no model can't leave the player on a story ped
     forceFreemodeModel = true,
 
     setModel = false,
-    -- Apply the character's saved look (model + clothing) to the player ped on
-    -- spawn, using the appearance the server read from the skin table and
-    -- Config.Appearance.applyExport (illenium's setPlayerAppearance). This is the
-    -- reliable way to guarantee the correct ped: this resource shows the character
-    -- on a SEPARATE preview ped during selection, so nothing sets the real player
-    -- ped unless we do it here. Leave ON for illenium/qbx.
     applyAppearance = true,
 
-    -- EXISTING characters: illenium loads the saved model + clothing itself on
-    -- 'QBCore:Client:OnPlayerLoaded' when the player logs in, so this resource no
-    -- longer triggers a reload (doing so raced illenium's cache and crashed it).
-    -- Kept here only for reference / non-illenium setups.
+    -- true if your clothing resource loads the saved skin itself on
+    -- QBCore:Client:OnPlayerLoaded (illenium does)
+    clothingLoadsItself = true,
     loadClothingEvent = 'illenium-appearance:client:reloadSkin',
-    -- NEW character: open illenium's appearance creator so the character actually
-    -- gets a saved look (without this, new chars spawn as a default ped forever).
+    -- NEW characters: opens the creator so the character gets a saved look at all
     newCharacterEvent = 'illenium-appearance:client:createFirstCharacter',
 
-    -- If you switch away from illenium and want this resource to spawn the ped
-    -- itself, set setModel/applyAppearance = true, clear the two events above, and
-    -- make sure Config.Appearance (skinTable/applyExport) matches your resource.
+    -- Login only tells the CORE a character is loaded. Everything else - HUD,
+    -- phone, garages, jobs, dispatch, inventory - waits for these spawn
+    -- confirmation events, so without them the server acts as if nobody joined.
+    notifyLoaded = true,
+    serverLoadedEvent = 'QBCore:Server:OnPlayerLoaded',
+    clientLoadedEvent = 'QBCore:Client:OnPlayerLoaded',
+    extraLoadedEvents = {
+        { name = 'qb-houses:server:SetInsideMeta',     server = true, args = { 0, false } },
+        { name = 'qb-apartments:server:SetInsideMeta', server = true, args = { 0, 0, false } },
+    },
+
+    -- release the selector's forced weather/clock, or the override survives into
+    -- the world for that player
+    restoreWeatherSync = true,
+    weatherSyncEvent = 'qb-weathersync:client:EnableSync',
+
+    resetRoutingBucket = true,
+    loadTimeoutMs = 10000, -- how long the server waits for the core's PlayerLoaded
 }
 
--- ---------------------------------------------------------------------------
--- Spawn selector
--- ---------------------------------------------------------------------------
--- After a character is chosen, show a spawn-point picker before dropping the
--- player into the world. Set enabled = false to skip it and go straight to the
--- last saved position (original behaviour).
+-- Spawn selector --------------------------------------------------------------
+
 Config.Spawn = {
     enabled = true,
-
-    -- Also show the picker for brand-new characters. New characters have no
-    -- "last location", so only the fixed points below are offered. Turn this off
-    -- if you want new characters to always drop at Config.PostLogin.defaultSpawn
-    -- (e.g. an apartment / spawn handled by another resource).
     showForNewCharacters = true,
 
-    -- Offer a "Last Location" tile when the character has a saved position.
     allowLastLocation = true,
     lastLocationLabel = 'Last Location',
     lastLocationDesc  = 'Return to where you logged off',
 
-    -- Heading text on the picker.
     title = 'CHOOSE SPAWN',
     subtitle = 'Where do you want to start?',
 
-    -- Fixed spawn points. `icon` is any id from the built-in icon set in
-    -- web/js/spawn.js (map-pin, building, plane, mountain, trees, waves, home,
-    -- briefcase, star, history). Unknown ids fall back to a pin.
+    -- icon ids come from the set in web/js/spawn.js: map-pin, building, plane,
+    -- mountain, trees, waves, home, briefcase, star, history
     locations = {
-        { id = 'legion',  label = 'Legion Square',  desc = 'Downtown Los Santos',   icon = 'building', coords = vec4(195.1, -933.9, 30.69, 235.0) },
-        { id = 'lsia',    label = 'LS Airport',     desc = 'Los Santos Intl',       icon = 'plane',    coords = vec4(-1035.7, -2731.6, 12.8, 240.0) },
-        { id = 'vespucci',label = 'Vespucci Beach', desc = 'Sun, sand and pier',    icon = 'waves',    coords = vec4(-1211.5, -1470.6, 4.4, 300.0) },
-        { id = 'sandy',   label = 'Sandy Shores',   desc = 'Blaine County desert',  icon = 'mountain', coords = vec4(1853.0, 3689.0, 34.2, 210.0) },
-        { id = 'paleto',  label = 'Paleto Bay',     desc = 'The far north',         icon = 'trees',    coords = vec4(-108.0, 6467.0, 31.6, 135.0) },
+        { id = 'legion',   label = 'Legion Square',  desc = 'Downtown Los Santos',  icon = 'building', coords = vec4(195.1, -933.9, 30.69, 235.0) },
+        { id = 'lsia',     label = 'LS Airport',     desc = 'Los Santos Intl',      icon = 'plane',    coords = vec4(-1035.7, -2731.6, 12.8, 240.0) },
+        { id = 'vespucci', label = 'Vespucci Beach', desc = 'Sun, sand and pier',   icon = 'waves',    coords = vec4(-1211.5, -1470.6, 4.4, 300.0) },
+        { id = 'sandy',    label = 'Sandy Shores',   desc = 'Blaine County desert', icon = 'mountain', coords = vec4(1853.0, 3689.0, 34.2, 210.0) },
+        { id = 'paleto',   label = 'Paleto Bay',     desc = 'The far north',        icon = 'trees',    coords = vec4(-108.0, 6467.0, 31.6, 135.0) },
     },
 
-    -- Ultimate fallback if a chosen point somehow has no coords.
     default = vec4(-1035.7, -2731.6, 12.8, 240.0),
 }
 
--- Branding shown top-left. Replace img with your own logo in web/img/.
-Config.Brand = {
-    name = 'FORGER',
-    tag = 'MULTICHARACTER',
-    logo = 'img/logo.svg',
-}
+-- Scene Maker -----------------------------------------------------------------
 
--- ---------------------------------------------------------------------------
--- Scene Maker
--- ---------------------------------------------------------------------------
--- An in-game tool (/scene) that lets a player pose their character, frame the
--- camera, and set the time/weather, then SAVE it as that character's personal
--- backdrop in the selector. Saved per character (forger_scenes table).
+-- /scene lets a player pose their character, frame a shot and set the time and
+-- weather, then save it as that character's personal backdrop in the selector.
 Config.SceneMaker = {
     enabled = true,
-    command = 'scene',          -- /scene to open the builder (in-game)
-
-    restricted = false,         -- true = require the ace below
+    command = 'scene',
+    restricted = false,
     ace = 'forger.scene',
 
-    -- Orbit camera rig for framing the shot. angle = azimuth around the ped,
-    -- height = metres above feet, distance = zoom out, fov, speed = auto-orbit.
+    -- orbit rig: angle = azimuth around the ped, height = metres above the feet
     camera = {
         defaults = { angle = 200.0, height = 0.55, distance = 3.4, fov = 45.0, speed = 0.0 },
         limits   = { height = { -0.5, 2.5 }, distance = { 1.5, 9.0 }, fov = { 25.0, 65.0 } },
-        steps    = { orbit = 3.0, height = 0.08, distance = 0.25, fov = 2.0 },
     },
 
-    -- Weathers offered in the picker.
     weathers = {
         'CLEAR', 'EXTRASUNNY', 'CLOUDS', 'OVERCAST', 'NEUTRAL',
         'RAIN', 'THUNDER', 'CLEARING', 'FOGGY', 'SMOG', 'XMAS', 'SNOW', 'BLIZZARD',
     },
 
-    -- Stances the ped can hold. Either a `scenario` (GTA world scenario) or a
-    -- `dict` + `anim` (+ optional `flag`). Grouped by `category` in the UI.
+    -- either a `scenario`, or a `dict` + `anim` (+ optional `flag`)
     stances = {
         { id = 'stand',     name = 'Stand',        category = 'Idle', scenario = 'WORLD_HUMAN_STAND_IMPATIENT' },
         { id = 'stand_up',  name = 'Stand tall',   category = 'Idle', scenario = 'WORLD_HUMAN_STAND_IMPATIENT_UPRIGHT' },
@@ -528,23 +548,14 @@ Config.SceneMaker = {
         { id = 'wave',      name = 'Wave',         category = 'Fun',  dict = 'friends@frj@ig_1', anim = 'wave_a', flag = 49 },
         { id = 'thumbsup',  name = 'Thumbs up',    category = 'Fun',  dict = 'anim@mp_player_intcelebrationmale@thumbs_up', anim = 'thumbs_up', flag = 49 },
     },
-
-    -- Movement speed multiplier when repositioning the ped in the builder.
-    moveSpeed = 1.0,
-
-    -- How far the SAVED scene is pulled back when viewed in the selector, relative
-    -- to how it was framed in the builder. The selector adds depth-of-field that
-    -- makes the subject read closer, so >1.0 gives a bit more breathing room.
-    viewZoomOut = 1.25,
 }
 
--- Co-op scene building: invite nearby players into a shared, isolated session to
--- build a scene together. Organizer controls time/weather/camera and saves;
--- invitees pick their stance and place their own vehicles.
+-- Co-op scene building: invite nearby players into an isolated session. The
+-- organizer controls time, weather and camera and saves the scene.
 Config.SceneMaker.coop = {
     enabled = true,
-    maxInvitees = 4,        -- organizer + up to 4 others
-    inviteRadius = 14.0,    -- metres: how close a player must be to be invited
-    inviteTimeout = 30,     -- seconds before an invite expires
-    bucketBase = 720000,    -- routing-bucket range for isolated build sessions
+    maxInvitees = 4,
+    inviteRadius = 14.0,  -- metres
+    inviteTimeout = 30,   -- seconds
+    bucketBase = 720000,  -- routing-bucket range for isolated sessions
 }

@@ -1,12 +1,5 @@
--- Server core: lists, creates, deletes and selects characters.
--- All destructive / selecting actions verify the character belongs to the
--- requesting player's license before doing anything.
-
 local DB = Config.DB
 
--- ---------------------------------------------------------------------------
--- helpers
--- ---------------------------------------------------------------------------
 local function getLicense(src)
     for _, id in ipairs(GetPlayerIdentifiers(src) or {}) do
         if id:sub(1, 8) == 'license:' then
@@ -21,9 +14,6 @@ local function getLicense(src)
     return nil
 end
 
--- Every license-style identifier the player carries. Servers store either
--- 'license:...' or 'license2:...' in the players table depending on setup, so we
--- match against all of them to be safe.
 local function getLicenses(src)
     local out = {}
     for _, id in ipairs(GetPlayerIdentifiers(src) or {}) do
@@ -58,9 +48,6 @@ local function nameAllowed(name)
     return name:match(pattern) ~= nil
 end
 
--- ---------------------------------------------------------------------------
--- read
--- ---------------------------------------------------------------------------
 local function fetchCharacters(licenses)
     if type(licenses) == 'string' then licenses = { licenses } end
     if not licenses or #licenses == 0 then return {} end
@@ -78,10 +65,9 @@ local function fetchCharacters(licenses)
         local charinfo = safeDecode(row[DB.columnCharInfo])
         local money = safeDecode(row[DB.columnMoney])
         local job = safeDecode(row[DB.columnJob])
+        local gang = safeDecode(row.gang)
         local meta = safeDecode(row.metadata)
 
-        -- saved appearance (active skin) so the selection preview shows the
-        -- character's real clothing/face, not a default ped
         local appearance
         local A = Config.Appearance
         if A and A.skinTable then
@@ -110,6 +96,8 @@ local function fetchCharacters(licenses)
                 label = (job.label) or (job.name) or 'Unemployed',
                 grade = (job.grade and (job.grade.name or job.grade.label)) or '',
             },
+            jobName = job.name or nil,
+            gangName = (type(gang) == 'table' and gang.name) or nil,
             cash = math.floor(tonumber(money.cash) or 0),
             bank = math.floor(tonumber(money.bank) or 0),
             playtime = minutesToLabel(meta.playtime or meta.playTime or 0),
@@ -136,9 +124,6 @@ local function ownsCharacter(licenses, citizenid)
     return row ~= nil
 end
 
--- ---------------------------------------------------------------------------
--- net: request character list + slot allowance
--- ---------------------------------------------------------------------------
 RegisterNetEvent('forger:server:requestCharacters', function()
     local src = source
     local licenses = getLicenses(src)
@@ -168,19 +153,12 @@ RegisterNetEvent('forger:server:requestCharacters', function()
     end)
 end)
 
--- ---------------------------------------------------------------------------
--- net: select (play) an existing character
--- ---------------------------------------------------------------------------
 -- Last-position protection. After FW.Login the player is LOGGED IN while their
--- (hidden) real ped is still parked at showcase / spawn-preview coords. Any
--- framework save that fires in that window (periodic save, restart save, a
--- crash or quit at the spawn picker) writes those parked coords into the
--- position column - which is exactly the "last location spawned me at the
--- selector spot" bug. We stash the REAL last position at select time; when the
--- client confirms it has actually placed the player, we write the true spawn
--- position back (healing any poisoned save), and if the player drops before
--- ever spawning we restore the stashed original.
-local pendingPlace = {}  -- src -> { citizenid = ..., coords = original DB coords or nil }
+-- hidden ped is still parked at showcase / spawn-preview coords, so any framework
+-- save in that window writes those coords as the last position. We stash the real
+-- one at select time, write the true spawn position once the client confirms
+-- placement, and restore the stash if the player drops before ever spawning.
+local pendingPlace = {}
 
 local function writePosition(citizenid, c)
     MySQL.update.await(
@@ -200,11 +178,17 @@ RegisterNetEvent('forger:server:selectCharacter', function(citizenid)
 
     local ok, err = FW.Login(src, citizenid)
     if ok then
+        local P = Config.PostLogin or {}
+        if not FW.WaitForLoaded(src, P.loadTimeoutMs or 10000) then
+            print(('^3[forger-multicharacter] %s (%s): the core never fired its PlayerLoaded event within %dms. Continuing anyway - check that qbx_core/qb-core is healthy.^0')
+                :format(GetPlayerName(src) or ('src ' .. src), tostring(citizenid), P.loadTimeoutMs or 10000))
+        end
+
+        FW.RefreshCommands(src)
         TriggerEvent('forger:server:characterSelected', src)
 
         local A = Config.Appearance
         local coords, gender, appearance
-        -- gender + last position from the players row
         local prow = MySQL.single.await(
             ('SELECT %s, %s FROM %s WHERE %s = ?'):format(Config.DB.columnCharInfo, Config.DB.columnPosition, Config.DB.table, Config.DB.columnCitizenId),
             { citizenid })
@@ -220,7 +204,6 @@ RegisterNetEvent('forger:server:selectCharacter', function(citizenid)
                 if okc and type(ci) == 'table' and (ci.gender == 1 or ci.gender == '1') then gender = 1 end
             end
         end
-        -- saved appearance from the clothing/skin table (active skin only)
         if A.skinTable then
             local q = ('SELECT %s FROM %s WHERE %s = ?'):format(A.skinColumn, A.skinTable, A.skinIdColumn)
             local args = { citizenid }
@@ -248,9 +231,6 @@ RegisterNetEvent('forger:server:selectCharacter', function(citizenid)
     })
 end)
 
--- Client confirms the player has been physically placed at their spawn. Write
--- that position as the character's last position - this overwrites any parked
--- showcase/picker coords a framework save may have written in the meantime.
 RegisterNetEvent('forger:server:spawnPlaced', function(pos)
     local src = source
     local p = pendingPlace[src]
@@ -259,43 +239,52 @@ RegisterNetEvent('forger:server:spawnPlaced', function(pos)
     if type(pos) ~= 'table' then return end
     local x, y, z = tonumber(pos.x), tonumber(pos.y), tonumber(pos.z)
     if not (x and y and z) then return end
-    -- sanity clamp to the playable map so a bad client can't write junk
     if x < -8000.0 or x > 8000.0 or y < -8000.0 or y > 9000.0 or z < -300.0 or z > 2000.0 then return end
     writePosition(p.citizenid, { x = x, y = y, z = z, w = tonumber(pos.w) or 0.0 })
 end)
 
--- Player dropped after logging in but BEFORE ever being placed in the world
--- (quit or crashed at the spawn picker). The framework's drop-save has just
--- written the parked showcase coords as their position; restore the true last
--- position we stashed at select time. Delayed so our write lands after the
--- framework's own drop-save.
+RegisterNetEvent('forger:server:playerSpawned', function()
+    local src = source
+    local P = Config.PostLogin or {}
+
+    local player = FW.GetPlayer(src)
+    if not (player and player.PlayerData and player.PlayerData.citizenid) then return end
+
+    FW.RefreshCommands(src)
+
+    if P.resetRoutingBucket ~= false then
+        pcall(function()
+            if GetPlayerRoutingBucket(tostring(src)) ~= 0 then
+                SetPlayerRoutingBucket(src, 0)
+            end
+        end)
+    end
+
+    TriggerEvent('forger:server:playerLoaded', src, player.PlayerData.citizenid)
+end)
+
 AddEventHandler('playerDropped', function()
     local src = source
     local p = pendingPlace[src]
     if not p then return end
     pendingPlace[src] = nil
-    if not (p.coords and p.coords.x) then return end  -- nothing to restore (new char)
+    if not (p.coords and p.coords.x) then return end
     SetTimeout(2500, function()
         writePosition(p.citizenid, p.coords)
     end)
 end)
 
--- ---------------------------------------------------------------------------
--- net: create a new character
--- ---------------------------------------------------------------------------
 RegisterNetEvent('forger:server:createCharacter', function(data)
     local src = source
     local license = getLicenses(src)
     if type(data) ~= 'table' then return end
 
-    -- validate names
     if not nameAllowed(data.firstname) or not nameAllowed(data.lastname) then
         return TriggerClientEvent('forger:client:actionResult', src, {
             action = 'create', ok = false, err = Locales['en']['err_invalid_name'],
         })
     end
 
-    -- enforce slots (async because of Discord lookups)
     local existing = fetchCharacters(license)
     Slots.resolve(src, function(maxSlots)
         if #existing >= maxSlots then
@@ -314,7 +303,16 @@ RegisterNetEvent('forger:server:createCharacter', function(data)
         }
 
         local ok, err = FW.CreateAndLogin(src, payload, #existing + 1)
-        if ok then TriggerEvent('forger:server:characterSelected', src) end
+        if ok then
+            local P = Config.PostLogin or {}
+            if not FW.WaitForLoaded(src, P.loadTimeoutMs or 10000) then
+                print(('^3[forger-multicharacter] %s: the core never fired its PlayerLoaded event for the new character within %dms. Continuing anyway.^0')
+                    :format(GetPlayerName(src) or ('src ' .. src), P.loadTimeoutMs or 10000))
+            end
+            FW.RefreshCommands(src)
+            if StarterItems then StarterItems.give(src) end
+            TriggerEvent('forger:server:characterSelected', src)
+        end
         TriggerClientEvent('forger:client:actionResult', src, {
             action = 'create', ok = ok, gender = payload.gender,
             err = ok and nil or (err or Locales['en']['err_generic']),
@@ -322,9 +320,6 @@ RegisterNetEvent('forger:server:createCharacter', function(data)
     end)
 end)
 
--- ---------------------------------------------------------------------------
--- net: delete a character
--- ---------------------------------------------------------------------------
 RegisterNetEvent('forger:server:deleteCharacter', function(citizenid)
     local src = source
 
@@ -341,11 +336,8 @@ RegisterNetEvent('forger:server:deleteCharacter', function(citizenid)
         })
     end
 
-    -- Remove the main row. Extend this list with any per-character tables your
-    -- server uses (owned vehicles, houses, inventory, etc.).
     MySQL.query.await(('DELETE FROM %s WHERE %s = ?'):format(DB.table, DB.columnCitizenId), { citizenid })
 
-    -- Common owned-data cleanup, wrapped so a missing table never errors.
     local cleanup = {
         'DELETE FROM player_vehicles WHERE citizenid = ?',
         'DELETE FROM player_houses WHERE citizenid = ?',
@@ -356,10 +348,8 @@ RegisterNetEvent('forger:server:deleteCharacter', function(citizenid)
         pcall(function() MySQL.query.await(q, { citizenid }) end)
     end
 
-    -- Let other resources react (e.g. custom cleanup).
     TriggerEvent('forger:server:characterDeleted', src, citizenid)
 
-    -- send back the fresh list
     local characters = fetchCharacters(license)
     Slots.resolve(src, function(maxSlots)
         TriggerClientEvent('forger:client:setCharacters', src, {
@@ -383,15 +373,9 @@ RegisterNetEvent('forger:server:deleteCharacter', function(citizenid)
     end)
 end)
 
--- ---------------------------------------------------------------------------
--- /logout : log out of the current character and re-open the selector.
--- The framework's Logout saves the character's position + data first, so the
--- next login (and "Last Location") is correct. Same net effect as qbx_core's
--- built-in logout, which is what mil-multichar relies on.
--- ---------------------------------------------------------------------------
 if Config.Logout and Config.Logout.enabled ~= false then
     local L = Config.Logout
-    local lastLogout = {}  -- [src] = GetGameTimer() of last use (cooldown)
+    local lastLogout = {}
 
     RegisterCommand(L.command or 'logout', function(src)
         if src == 0 then
@@ -399,7 +383,6 @@ if Config.Logout and Config.Logout.enabled ~= false then
             return
         end
 
-        -- permission
         if L.restricted and not IsPlayerAceAllowed(src, L.ace or 'forger.logout') then
             TriggerClientEvent('forger:client:actionResult', src, {
                 action = 'logout', ok = false, reason = 'no_permission',
@@ -407,7 +390,6 @@ if Config.Logout and Config.Logout.enabled ~= false then
             return
         end
 
-        -- cooldown
         local cd = tonumber(L.cooldown) or 0
         if cd > 0 then
             local now = GetGameTimer()
@@ -416,13 +398,10 @@ if Config.Logout and Config.Logout.enabled ~= false then
             lastLogout[src] = now
         end
 
-        -- Log the current character out (this saves their position + data), then
-        -- re-open the selector. FW.Logout is a safe no-op if nothing is loaded, and
-        -- openSelector() on the client guards against double-opening.
         FW.Logout(src)
-        Wait(300)  -- Logout saves + unregisters (qbx waits ~200ms internally)
+        Wait(300)
         TriggerClientEvent('forger:client:open', src)
-    end, false)  -- restricted = false here; the ace check above is config-driven
+    end, false)
 
     AddEventHandler('playerDropped', function()
         lastLogout[source] = nil

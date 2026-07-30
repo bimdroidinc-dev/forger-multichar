@@ -4,8 +4,8 @@ lua54 'yes'
 
 name 'forger-multicharacter'
 author 'Velocity Custom'
-description 'Crisp cinematic multicharacter selector with per-player character limits, Discord role and license overrides.'
-version '1.0.0'
+description 'Cinematic multicharacter selector with a spawn picker, per-player character limits, Discord role overrides, starter items and no streamed assets.'
+version '1.2.0'
 
 shared_scripts {
     'config.lua',
@@ -13,6 +13,7 @@ shared_scripts {
 }
 
 client_scripts {
+    'client/emotes.lua',
     'client/main.lua',
     'client/partner.lua',
     'client/scenemaker.lua',
@@ -23,6 +24,7 @@ server_scripts {
     'bridge/framework.lua',
     'server/discord.lua',
     'server/slots.lua',
+    'server/starteritems.lua',
     'server/scenemaker.lua',
     'server/main.lua',
     'server/partner.lua',

@@ -1,25 +1,20 @@
--- Scene Maker (client): an in-game builder (/scene) to pose your character,
--- frame an orbit camera, and set time/weather, then save it as this character's
--- selector backdrop. Self-contained: its own camera + NUI messages so it never
--- collides with the selector's scene code.
-
 if not (Config.SceneMaker and Config.SceneMaker.enabled) then return end
 
 local SM = {
     active = false,
     cam = nil,
-    opts = nil,      -- { angle, height, distance, fov, speed }
-    cur = nil,       -- eased camera values
+    opts = nil,
+    cur = nil,
     stance = 'stand',
     weather = 'CLEAR',
     hour = 12,
     minute = 0,
     moving = false,
-    vehicles = {},   -- placed: { entity, model, plate, coords, heading }
-    ghost = nil,     -- vehicle being positioned
+    vehicles = {},
+    ghost = nil,
     placing = false,
-    session = nil,   -- co-op: { role = 'organizer'|'invitee' }
-    members = 1,     -- member count (from roster)
+    session = nil,
+    members = 1,
 }
 local COOP = Config.SceneMaker.coop or {}
 
@@ -47,8 +42,6 @@ end
 local function clamp(v, lo, hi) if v < lo then return lo elseif v > hi then return hi else return v end end
 local function lerp(a, b, t) return a + (b - a) * t end
 
--- The point the camera orbits: the group centroid while co-op (so the whole
--- scene is framed), otherwise the local ped.
 local function camFocus()
     if SM.session and SM.members > 1 then
         local sx, sy, sz, n = 0.0, 0.0, 0.0, 0
@@ -64,8 +57,6 @@ local function camFocus()
     return GetEntityCoords(PlayerPedId())
 end
 
--- Frame the orbit camera around the focus point. SM.cur eases toward SM.opts each
--- frame so slider changes glide instead of snapping (no jank).
 local function updateCam()
     if not SM.cam or not SM.cur then return end
     local s = camFocus()
@@ -97,19 +88,11 @@ local function applyStance(id)
     end
 end
 
--- Are we loaded as a character? The isLoggedIn state bag isn't set on every
--- framework/config, so fall back to the framework's own player data, and if we
--- genuinely can't tell, allow it (the server re-checks before saving).
--- Ground-snap helper: puts a vehicle flat on the surface below so it never
--- floats or sinks. Repeated calls during placement keep it planted.
 local function planted(veh)
     if not DoesEntityExist(veh) then return end
     SetVehicleOnGroundProperly(veh)
 end
 
--- Start positioning a garage vehicle. Spawns as a translucent ghost the player
--- nudges with arrows and rotates with Q/E, staying planted every frame, then
--- confirms with Enter (or cancels with Backspace).
 local function startPlaceVehicle(model, plate)
     if not SM.active or SM.placing then return end
     for _, v in ipairs(SM.vehicles) do
@@ -129,7 +112,7 @@ local function startPlaceVehicle(model, plate)
     local ped = PlayerPedId()
     local p = GetEntityCoords(ped)
     local a0 = math.rad((SM.cur and SM.cur.angle) or 200.0)
-    local networked = SM.session ~= nil  -- co-op: other members must see it
+    local networked = SM.session ~= nil
     local veh = CreateVehicle(hash, p.x - math.cos(a0) * 5.5, p.y - math.sin(a0) * 5.5, p.z, 0.0, networked, false)
     SetModelAsNoLongerNeeded(hash)
     if networked then
@@ -139,10 +122,8 @@ local function startPlaceVehicle(model, plate)
     SetEntityAlpha(veh, 170, false)
     SetVehicleDoorsLocked(veh, 4)
     SetEntityInvincible(veh, true)
-    FreezeEntityPosition(veh, true)  -- frozen the WHOLE time so it can't roll/slide
+    FreezeEntityPosition(veh, true)
 
-    -- height from the entity origin to the wheels, so we can plant it precisely
-    -- with a raycast instead of physics (physics is what made it slide).
     local minD = GetModelDimensions(hash)
     local zoff = -(minD.z or 0.0)
     local function plantAt(x, y, fallbackZ)
@@ -164,7 +145,7 @@ local function startPlaceVehicle(model, plate)
             local a = math.rad((SM.cur and SM.cur.angle) or 200.0)
             local fwdX, fwdY = -math.cos(a), -math.sin(a)
             local rgtX, rgtY = -math.sin(a),  math.cos(a)
-            local step = IsControlPressed(0, 21) and 0.14 or 0.05  -- hold Shift = faster
+            local step = IsControlPressed(0, 21) and 0.14 or 0.05
             local c = GetEntityCoords(veh)
             local dx, dy = 0.0, 0.0
             if IsControlPressed(0, 172) then dx = dx + fwdX * step; dy = dy + fwdY * step end
@@ -224,7 +205,6 @@ local function loggedIn()
     local st = LocalPlayer and LocalPlayer.state
     if st and st.isLoggedIn ~= nil then
         if st.isLoggedIn == true then return true end
-        -- state bag explicitly false: still double-check the framework below
     end
     local ok, pd = pcall(function() return exports.qbx_core:GetPlayerData() end)
     if ok and type(pd) == 'table' and pd.citizenid then return true end
@@ -233,7 +213,6 @@ local function loggedIn()
         local d = core.Functions.GetPlayerData()
         if type(d) == 'table' and d.citizenid then return true end
     end
-    -- explicit false from the state bag wins; otherwise allow and let the server decide
     if st and st.isLoggedIn == false then return false end
     return true
 end
@@ -248,9 +227,6 @@ function SM.open(role)
     end
     role = role or 'organizer'
     SM.role = role
-    -- A session (with its own private routing bucket) is created even for solo
-    -- building, so the player is isolated and doesn't disturb other players' RP.
-    -- Inviting simply adds members to the same bucket.
     SM.session = COOP.enabled and { role = role } or nil
     SM.members = 1
     SM.active = true
@@ -266,16 +242,11 @@ function SM.open(role)
 
     local ped = PlayerPedId()
     FreezeEntityPosition(ped, true)
-    -- The player is already standing correctly where they ran /scene, so do NOT
-    -- re-snap: SetEntityCoords drops the ped's ROOT to the ground Z, sinking it
-    -- to the chest.
     SM.vehicles = {}
     SM.ghost = nil
     SM.placing = false
     applyStance(SM.stance)
 
-    -- organizer (incl. solo): open a session so we get an isolated private bucket.
-    -- invitees are already placed in the organizer's bucket server-side.
     if SM.session and role == 'organizer' then
         TriggerServerEvent('forger:server:sceneStart')
     end
@@ -329,19 +300,14 @@ function SM.close(silent)
     SendNUIMessage({ action = 'sceneClose' })
     ClearOverrideWeather()
     ClearWeatherTypePersist()
-    -- tell the server we left the session (unless the server is the one ending it)
     if wasSession and not silent then
         TriggerServerEvent('forger:server:sceneLeave')
     end
 end
 
--- ---------------------------------------------------------------------------
--- NUI callbacks
--- ---------------------------------------------------------------------------
 local function isOrganizer() return SM.role ~= 'invitee' end
 local function isInvitee() return SM.role == 'invitee' end
 
--- push shared time/weather to the session so invitees see the same lighting
 local function syncConfig()
     if SM.session and SM.role == 'organizer' then
         TriggerServerEvent('forger:server:sceneConfig', {
@@ -390,8 +356,6 @@ RegisterNUICallback('sceneTime', function(d, cb)
     cb('ok')
 end)
 
--- Reposition: hide the panel, hand the player normal control to walk to a spot,
--- press E to lock it in and return to framing.
 RegisterNUICallback('sceneMove', function(_, cb)
     cb('ok')
     if not SM.active or SM.moving then return end
@@ -406,7 +370,7 @@ RegisterNUICallback('sceneMove', function(_, cb)
     CreateThread(function()
         SendNUIMessage({ action = 'sceneInstruct', show = true, mode = 'move' })
         while SM.moving and SM.active do
-            if IsControlJustPressed(0, 38) or IsControlJustPressed(0, 177) then  -- E or Backspace
+            if IsControlJustPressed(0, 38) or IsControlJustPressed(0, 177) then
                 SM.moving = false
                 SendNUIMessage({ action = 'sceneInstruct', show = false })
                 FreezeEntityPosition(ped, true)
@@ -429,21 +393,17 @@ end)
 RegisterNUICallback('sceneSave', function(_, cb)
     cb('ok')
     if not SM.active then return end
-    -- invitees can't save; only the organizer finishes the scene
     if isInvitee() then
         notify('Only the scene organizer can save the scene.')
         return
     end
-    -- co-op with other members: sync the final camera + time/weather, then record
-    -- (the server snapshots everyone and saves the scene to all their characters)
     if SM.session and SM.members > 1 then
         TriggerServerEvent('forger:server:sceneConfig', {
             hour = SM.hour, minute = SM.minute, weather = SM.weather,
         })
-        TriggerServerEvent('forger:server:sceneRecord', SM.opts)  -- pass the framing directly
+        TriggerServerEvent('forger:server:sceneRecord', SM.opts)
         return
     end
-    -- solo save
     local ped = PlayerPedId()
     local c = GetEntityCoords(ped)
     local vehs = {}
@@ -460,7 +420,6 @@ RegisterNUICallback('sceneSave', function(_, cb)
     })
 end)
 
--- garage / vehicle placement
 RegisterNUICallback('sceneGarage', function(_, cb)
     TriggerServerEvent('forger:server:getGarage')
     cb('ok')
@@ -503,9 +462,6 @@ RegisterNetEvent('forger:client:sceneSaved', function(res)
     if res and res.ok and not res.cleared then SM.close() end
 end)
 
--- ---------------------------------------------------------------------------
--- co-op
--- ---------------------------------------------------------------------------
 local APPEARANCE_RESOURCE = (Config.Appearance and Config.Appearance.resource) or 'illenium-appearance'
 
 local function applyConfigSync(cfg)
@@ -520,7 +476,6 @@ local function applyConfigSync(cfg)
     SendNUIMessage({ action = 'sceneConfigSync', hour = SM.hour, minute = SM.minute, weather = SM.weather })
 end
 
--- Organizer clicks Invite: gather nearby players and show a picker in the UI.
 RegisterNUICallback('sceneInvite', function(_, cb)
     cb('ok')
     if not (SM.active and isOrganizer()) then return end
@@ -539,21 +494,18 @@ RegisterNUICallback('sceneInvite', function(_, cb)
     SendNUIMessage({ action = 'sceneInvitePicker', players = players })
 end)
 
--- Organizer picked who to invite: start the co-op session (if not already) and
--- send the invites to exactly those players.
 RegisterNUICallback('sceneInviteSend', function(d, cb)
     cb('ok')
     if not (SM.active and isOrganizer() and d and type(d.ids) == 'table' and #d.ids > 0) then return end
     if not SM.session then
         SM.session = { role = 'organizer' }
         TriggerServerEvent('forger:server:sceneStart')
-        Wait(90)  -- let the session register server-side
+        Wait(90)
     end
     TriggerServerEvent('forger:server:sceneInvite', d.ids)
     notify('Invite sent to ' .. #d.ids .. ' player(s).')
 end)
 
--- Received an invite: show a NUI prompt, accept/decline with keys.
 RegisterNetEvent('forger:client:sceneInvited', function(data)
     if SM.active then return end
     local org = (data and data.orgName) or 'A player'
@@ -592,7 +544,6 @@ RegisterNetEvent('forger:client:sceneRoster', function(roster)
     SendNUIMessage({ action = 'sceneRoster', roster = roster or {} })
 end)
 
--- Snapshot request (on record): send our appearance + stance + transform + cars.
 RegisterNetEvent('forger:client:sceneSnapshot', function()
     if not SM.active then
         TriggerServerEvent('forger:server:sceneSnapshotReply', {})
@@ -621,12 +572,12 @@ end)
 
 RegisterNetEvent('forger:client:sceneRecorded', function(res)
     notify('Scene saved to ' .. ((res and res.saved) or 0) .. ' character(s).')
-    SM.close(true)  -- session already ended server-side
+    SM.close(true)
 end)
 
 RegisterNetEvent('forger:client:sceneEnded', function(data)
     if data and data.reason == 'organizer_left' then notify('The scene organizer left.')
-    elseif data and data.reason == 'recorded' then  -- handled by sceneRecorded
+    elseif data and data.reason == 'recorded' then
     end
     SM.close(true)
 end)
@@ -635,9 +586,6 @@ RegisterNetEvent('forger:client:sceneNotify', function(msg)
     notify(msg or '')
 end)
 
--- ---------------------------------------------------------------------------
--- entry points
--- ---------------------------------------------------------------------------
 RegisterCommand(Config.SceneMaker.command or 'scene', function()
     SM.open()
 end, false)

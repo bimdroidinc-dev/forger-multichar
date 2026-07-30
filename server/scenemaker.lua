@@ -1,8 +1,3 @@
--- Scene Maker (server): persists a per-character custom selector backdrop.
--- Table forger_scenes { citizenid, data(JSON) }. The client builder captures a
--- scene (coords, stance, camera, time, weather) and saves it here; the selector
--- reads it back per character (see fetchCharacters in server/main.lua).
-
 SceneMaker = SceneMaker or {}
 
 if not (Config.SceneMaker and Config.SceneMaker.enabled) then return end
@@ -16,7 +11,6 @@ CreateThread(function()
     )]])
 end)
 
--- Decoded saved scene for a character, or nil.
 function SceneMaker.getForCitizen(cid)
     if not cid then return nil end
     local ok, row = pcall(function()
@@ -29,9 +23,6 @@ function SceneMaker.getForCitizen(cid)
     return nil
 end
 
--- The citizenid the source is currently loaded as. Tries qbx then qb regardless
--- of the detected framework name, so a bridge/detection mismatch can't wrongly
--- report "no character".
 local function citizenidOf(src)
     local ok, p = pcall(function() return exports.qbx_core:GetPlayer(src) end)
     if ok and p and p.PlayerData and p.PlayerData.citizenid then return p.PlayerData.citizenid end
@@ -47,15 +38,12 @@ local function citizenidOf(src)
     return nil
 end
 
--- Sanitise the incoming scene to a known shape so a spoofed payload can't store
--- arbitrary data. Everything is a plain number/string.
 local function sanitize(data)
     if type(data) ~= 'table' then return nil end
     local function num(v, d) v = tonumber(v); return v ~= nil and v or d end
     local c = type(data.coords) == 'table' and data.coords or {}
     local cam = type(data.cam) == 'table' and data.cam or {}
 
-    -- placed vehicles (model + world transform); capped so a payload can't be huge
     local vehicles = {}
     if type(data.vehicles) == 'table' then
         for _, v in ipairs(data.vehicles) do
@@ -89,8 +77,6 @@ local function sanitize(data)
     return out
 end
 
--- Return the player's owned vehicles (from player_vehicles) for the placement
--- picker: model spawn-name + plate.
 RegisterNetEvent('forger:server:getGarage', function()
     local src = source
     local cid = citizenidOf(src)
@@ -112,8 +98,6 @@ RegisterNetEvent('forger:server:getGarage', function()
     TriggerClientEvent('forger:client:garageList', src, out)
 end)
 
--- Save a scene table onto a character. Shared by the solo save and the co-op
--- record (which saves the same scene onto every participant).
 function SceneMaker.saveSceneFor(cid, scene)
     if not cid or type(scene) ~= 'table' then return false end
     local copy = {}
@@ -146,7 +130,6 @@ RegisterNetEvent('forger:server:saveScene', function(data)
     TriggerClientEvent('forger:client:sceneSaved', src, { ok = true })
 end)
 
--- Clear the saved scene for the current character.
 RegisterNetEvent('forger:server:clearScene', function()
     local src = source
     local cid = citizenidOf(src)
@@ -155,18 +138,12 @@ RegisterNetEvent('forger:server:clearScene', function()
     TriggerClientEvent('forger:client:sceneSaved', src, { ok = true, cleared = true })
 end)
 
--- ===========================================================================
--- CO-OP SESSIONS
--- Invite nearby players into an isolated routing bucket, build together, then
--- snapshot everyone (appearance + stance + position + their vehicles) and save
--- the same scene onto every participant's character.
--- ===========================================================================
 local COOP = Config.SceneMaker.coop or {}
 
 if COOP.enabled then
-    local sessions  = {}   -- [org] = { org, members={[src]=true}, order={}, bucket, config, rec }
-    local memberOf  = {}   -- [src] = org
-    local invites   = {}   -- [invitee] = { org = org, expires = os.time()+timeout }
+    local sessions  = {}
+    local memberOf  = {}
+    local invites   = {}
     local nextBucket = COOP.bucketBase or 720000
 
     local function nameOf(src) return GetPlayerName(src) or ('Player ' .. src) end
@@ -177,7 +154,6 @@ if COOP.enabled then
         return nil
     end
 
-    -- Send the roster (names + roles) to every member so their UI can list who's in.
     local function pushRoster(session)
         if not session then return end
         local roster = {}
@@ -220,9 +196,7 @@ if COOP.enabled then
         sessions[org] = nil
     end
 
-    -- Leave whatever session a player is in (as member or organizer).
     local function leaveAny(src)
-        -- pending invite?
         invites[src] = nil
         local org = memberOf[src]
         if not org then return end
@@ -235,7 +209,6 @@ if COOP.enabled then
     end
     SceneMaker.leaveCoop = leaveAny
 
-    -- Organizer opens the builder -> start a fresh session (leaving any current one).
     RegisterNetEvent('forger:server:sceneStart', function()
         local src = source
         leaveAny(src)
@@ -251,8 +224,6 @@ if COOP.enabled then
         pushRoster(sessions[src])
     end)
 
-    -- Organizer invites nearby players (client supplies candidate ids; server
-    -- validates distance and capacity).
     RegisterNetEvent('forger:server:sceneInvite', function(targets)
         local src = source
         local session = sessions[src]
@@ -295,7 +266,7 @@ if COOP.enabled then
             TriggerClientEvent('forger:client:sceneNotify', src, 'That scene is full.')
             return
         end
-        leaveAny(src)  -- leave any current session first (with their stuff)
+        leaveAny(src)
         session.members[src] = true
         session.order[#session.order + 1] = src
         memberOf[src] = inv.org
@@ -304,7 +275,6 @@ if COOP.enabled then
         pushRoster(session)
     end)
 
-    -- Organizer updates shared time / weather / camera.
     RegisterNetEvent('forger:server:sceneConfig', function(cfg)
         local src = source
         local session = sessions[src]
@@ -323,13 +293,11 @@ if COOP.enabled then
         leaveAny(source)
     end)
 
-    -- Organizer records: ask every member for a snapshot, collect, then save the
-    -- assembled scene onto all of their characters.
     RegisterNetEvent('forger:server:sceneRecord', function(cam)
         local src = source
         local session = sessions[src]
         if not session or session.org ~= src then return end
-        if session.rec then return end  -- already recording
+        if session.rec then return end
         if type(cam) == 'table' then session.config.cam = cam end
 
         session.rec = { snaps = {}, need = 0, done = 0 }
@@ -339,7 +307,6 @@ if COOP.enabled then
             TriggerClientEvent('forger:client:sceneSnapshot', m)
         end
 
-        -- finalize after a short window even if someone didn't reply
         CreateThread(function()
             local deadline = GetGameTimer() + 2500
             while session.rec and session.rec.done < session.rec.need and GetGameTimer() < deadline do
@@ -407,7 +374,6 @@ if COOP.enabled then
         end
     end)
 
-    -- expire stale invites
     CreateThread(function()
         while true do
             local now = os.time()
